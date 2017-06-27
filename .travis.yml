@@ -1,0 +1,7 @@
+language: go
+go:
+  - 1.8
+install:
+  - go get github.com/pingcap/tidb
+  - cd $GOPATH/src/github.com/pingcap/tidb && make
+  - go get github.com/huangjunwen/JustSQL
