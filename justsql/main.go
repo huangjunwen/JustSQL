@@ -2,8 +2,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"github.com/huangjunwen/JustSQL/embed_db"
+	"github.com/huangjunwen/JustSQL/tmpl"
 	"github.com/pingcap/tidb/ast"
+	"github.com/pingcap/tidb/model"
 	"io/ioutil"
 	"log"
 	"os"
@@ -22,6 +25,49 @@ func checkDir(path string) bool {
 		return fi.IsDir()
 	}
 	return false
+}
+
+func loadDDL(db *embed_db.EmbedDB) {
+	// No ddl dir.
+	if *ddl_dir == "" {
+		return
+	}
+
+	ddl_files, err := filepath.Glob(*ddl_dir + "/*.sql")
+	if err != nil {
+		log.Fatalf("filepath.Glob(%q): %s", *ddl_dir+"/*.sql", err)
+	}
+
+	// For each SQL file.
+	for _, ddl_file := range ddl_files {
+		content, err := ioutil.ReadFile(ddl_file)
+		if err != nil {
+			log.Fatalf("ioutil.ReadFile(%q): %s", ddl_file, err)
+		}
+		ddl := string(content)
+
+		// Parse file content.
+		stmts, err := db.Parse(ddl)
+		if err != nil {
+			log.Fatalf("db.Parse(<file: %q>): %s", ddl_file, err)
+		}
+
+		// Check DDL statments.
+		for _, stmt := range stmts {
+			if _, ok := stmt.(ast.DDLNode); ok {
+				continue
+			}
+			if _, ok := stmt.(*ast.SetStmt); ok {
+				continue
+			}
+			log.Fatalf("<file: %q>: %q is not a DDL statement (%T)", ddl_file, stmt.Text(), stmt)
+		}
+
+		// Execute it.
+		if _, err := db.Execute(ddl); err != nil {
+			log.Fatalf("db.Execute(<file: %q>): %s", ddl_file, err)
+		}
+	}
 }
 
 func main() {
@@ -60,40 +106,12 @@ func main() {
 	db.MustExecute("USE justsql;")
 
 	// Load DDL.
-	ddl_files, err := filepath.Glob(*ddl_dir + "/*.sql")
-	if err != nil {
-		log.Fatalf("filepath.Glob(%q): %s", *ddl_dir+"/*.sql", err)
-	}
+	loadDDL(db)
 
-	// For each SQL file.
-	for _, ddl_file := range ddl_files {
-		content, err := ioutil.ReadFile(ddl_file)
-		if err != nil {
-			log.Fatalf("ioutil.ReadFile(%q): %s", ddl_file, err)
-		}
-		ddl := string(content)
-
-		// Parse file content.
-		stmts, err := db.Parse(ddl)
-		if err != nil {
-			log.Fatalf("db.Parse(<file: %q>): %s", ddl_file, err)
-		}
-
-		// Check DDL statments.
-		for _, stmt := range stmts {
-			if _, ok := stmt.(ast.DDLNode); ok {
-				continue
-			}
-			if _, ok := stmt.(*ast.SetStmt); ok {
-				continue
-			}
-			log.Fatalf("<file: %q>: %q is not a DDL statement (%T)", ddl_file, stmt.Text(), stmt)
-		}
-
-		// Execute it.
-		if _, err := db.Execute(ddl); err != nil {
-			log.Fatalf("db.Execute(<file: %q>): %s", ddl_file, err)
-		}
+	// XXX
+	for _, table := range db.Domain().InfoSchema().SchemaTables(model.NewCIStr("justsql")) {
+		tmpl.Render(db, table.Meta(), os.Stdout)
+		fmt.Printf("\n")
 	}
 
 }
