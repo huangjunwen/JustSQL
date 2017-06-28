@@ -1,15 +1,21 @@
 package embed_db
 
 import (
+	"github.com/ngaut/log"
 	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/context"
+	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/plan"
 	"github.com/pingcap/tidb/sessionctx"
 )
+
+func init() {
+	log.SetLevelByString("error")
+}
 
 // Use TiDB as an embeded database to execute or compile SQLs.
 type EmbedDB struct {
@@ -46,7 +52,13 @@ func NewEmbedDB(store_path string) (*EmbedDB, error) {
 
 }
 
-func (db *EmbedDB) parse(src string) ([]ast.StmtNode, error) {
+// Get Tidb domain (storage space).
+func (db *EmbedDB) Domain() *domain.Domain {
+	return sessionctx.GetDomain(db.Sess.(context.Context))
+}
+
+// Parse SQLs.
+func (db *EmbedDB) Parse(src string) ([]ast.StmtNode, error) {
 	ctx := db.Sess.(context.Context)
 	p := parser.New()
 	p.SetSQLMode(ctx.GetSessionVars().SQLMode)
@@ -54,20 +66,10 @@ func (db *EmbedDB) parse(src string) ([]ast.StmtNode, error) {
 	return p.Parse(src, charset, collation)
 }
 
-func (db *EmbedDB) parseOne(src string) (ast.StmtNode, error) {
-	stmts, err := db.parse(src)
-	if err != nil {
-		return nil, err
-	}
-	if len(stmts) != 1 {
-		return nil, parser.ErrSyntax
-	}
-	return stmts[0], nil
-}
-
-func (db *EmbedDB) infer(stmt ast.StmtNode) error {
+// Resolve names/types in SQL statement.
+func (db *EmbedDB) Resolve(stmt ast.StmtNode) error {
 	ctx := db.Sess.(context.Context)
-	is := sessionctx.GetDomain(ctx).InfoSchema()
+	is := db.Domain().InfoSchema()
 
 	// This is part of tidb.Compile. Also refer expression/typeinferer_test.go
 
@@ -87,37 +89,15 @@ func (db *EmbedDB) infer(stmt ast.StmtNode) error {
 	return nil
 }
 
-// Parse then infer names and types for SQL.
-func (db *EmbedDB) Compile(src string) ([]ast.StmtNode, error) {
-	stmts, err := db.parse(src)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, stmt := range stmts {
-		if err := db.infer(stmt); err != nil {
-			return nil, err
-		}
-	}
-
-	return stmts, nil
-}
-
-// Parse then infer names and types for SQL for single statement.
-func (db *EmbedDB) CompileOne(src string) (ast.StmtNode, error) {
-	stmt, err := db.parseOne(src)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := db.infer(stmt); err != nil {
-		return nil, err
-	}
-
-	return stmt, nil
-}
-
 // Execute some SQLs.
 func (db *EmbedDB) Execute(src string) ([]ast.RecordSet, error) {
 	return db.Sess.Execute(src)
+}
+
+// Execute some SQLs and Panic if error.
+func (db *EmbedDB) MustExecute(src string) {
+	_, err := db.Execute(src)
+	if err != nil {
+		panic(err)
+	}
 }
