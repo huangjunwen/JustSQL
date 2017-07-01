@@ -13,13 +13,14 @@ type Comment struct {
 	Content string
 }
 
+// Scan SQL comments ('#...', '--...', '/*...*/').
 func ScanComment(src string) ([]Comment, error) {
 	i := 0
 	l := len(src)
 	comments := make([]Comment, 0)
 
 	// Find the next char c, return found or not. 'i' will be set
-	// to the next char.
+	// to the next char of c.
 	find := func(c byte) bool {
 		for ; i < l; i += 1 {
 			if src[i] == c {
@@ -67,6 +68,7 @@ func ScanComment(src string) ([]Comment, error) {
 				continue
 			}
 			offset := i
+			i += 2
 			for {
 				if !find('*') || i >= l {
 					return nil, errors.New("Missing '*/'")
