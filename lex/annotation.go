@@ -7,7 +7,9 @@ import (
 )
 
 var (
-	// key[:val]
+	// KV format: key[:val]
+	// Example:
+	//   param:name type:int attr:"hello world"
 	kv_re     *regexp.Regexp = regexp.MustCompile(`^([A-z][0-9A-z_]*)(:(("[^"\\]*(?:\\.[^"\\]*)*")|([^\s:"]+)))?\s+`)
 	escape_re *regexp.Regexp = regexp.MustCompile(`\\.`)
 )
