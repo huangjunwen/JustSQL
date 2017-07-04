@@ -7,15 +7,15 @@ import (
 )
 
 var (
-	// KV format:
-	//   key1[:val1] key2[:val2] ...
+	// Annotation format:
+	//   primaryKey[:primaryVal] key[:val] ...
 	// Example:
 	//   param:name type:[]int attr:"hello world"
-	kv_re     *regexp.Regexp = regexp.MustCompile(`^([A-z][0-9A-z_]*)(:(("[^"\\]*(?:\\.[^"\\]*)*")|([^\s:"]+)))?\s+`)
+	annot_re  *regexp.Regexp = regexp.MustCompile(`^([A-z][0-9A-z_]*)(:(("[^"\\]*(?:\\.[^"\\]*)*")|([^\s:"]+)))?\s+`)
 	escape_re *regexp.Regexp = regexp.MustCompile(`\\.`)
 )
 
-func parseKV(src string) func() (string, string, error) {
+func parseAnnot(src string) func() (string, string, error) {
 	remain := append([]byte(strings.TrimSpace(src)), ' ')
 	return func() (string, string, error) {
 		// drained
@@ -23,7 +23,7 @@ func parseKV(src string) func() (string, string, error) {
 			return "", "", nil
 		}
 
-		m := kv_re.FindSubmatch(remain)
+		m := annot_re.FindSubmatch(remain)
 		if m == nil {
 			return "", "", fmt.Errorf("Illegal kv format near: %q", string(remain))
 		}
