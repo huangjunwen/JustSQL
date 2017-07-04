@@ -164,4 +164,5 @@ func TestCommentWithAnnot(t *testing.T) {
 		},
 	}, false)
 	testScanComment(t, "/* $*/", nil, true)
+	testScanComment(t, "/* $unknown */", nil, true)
 }
