@@ -12,11 +12,11 @@ func testScanComment(t *testing.T, src string, expect []Comment, expect_err bool
 		src, expect, res, expect_err, err)
 
 	if (err != nil && !expect_err) || (err == nil && expect_err) {
-		t.Errorf("%q: expect_err=%v, err=%v\n", src, expect_err, err)
+		t.Errorf("%q: err != expect_err\n", src)
 		return
 	}
 	if !reflect.DeepEqual(res, expect) {
-		t.Errorf("%q: scan failed\n", src)
+		t.Errorf("%q: result != expect\n", src)
 		return
 	}
 
