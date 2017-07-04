@@ -45,6 +45,14 @@ func ScanComment(src string) ([]Comment, error) {
 			i += 1
 			continue
 
+		// skip string literal
+		case '\'', '"':
+			j := scanStringLiteral(src, i)
+			if j < 0 {
+				return nil, errors.New("Bad string literal")
+			}
+			i = j
+
 		// # ... \n
 		case '#':
 			offset := i
@@ -83,4 +91,29 @@ func ScanComment(src string) ([]Comment, error) {
 
 	}
 	return comments, nil
+}
+
+// Scan string literal at s[i:] and return the offset of the
+// end of string literal or -1 if the string is illegal.
+func scanStringLiteral(s string, i int) int {
+	l := len(s)
+	c := s[i]
+
+	if c != '\'' && c != '"' {
+		return -1
+	}
+
+	for i += 1; i < l; i += 1 {
+		// enclosed
+		if s[i] == c {
+			return i + 1
+		}
+		// escape
+		if s[i] == '\\' {
+			i += 1
+		}
+	}
+
+	return -1
+
 }

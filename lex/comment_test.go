@@ -128,3 +128,14 @@ func TestMix(t *testing.T) {
 		},
 	}, false)
 }
+
+func TestStringLiteral(t *testing.T) {
+	fmt.Println("TestStringLiteral")
+	testScanComment(t, "hello '/* alsjfdjas */'/*  */", []Comment{
+		Comment{
+			Offset:  23,
+			Length:  6,
+			Content: "",
+		},
+	}, false)
+}
