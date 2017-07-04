@@ -8,7 +8,7 @@ import (
 
 func testScanComment(t *testing.T, src string, expect []Comment, expect_err bool) {
 	res, err := ScanComment(src)
-	fmt.Printf("%q:\n\texpect=%+v\n\tresult=%+v\n\texpect_err=%v\n\terr=%v\n",
+	fmt.Printf("%q:\n\texpect=%#v\n\tresult=%#v\n\texpect_err=%v\n\terr=%v\n",
 		src, expect, res, expect_err, err)
 
 	if (err != nil && !expect_err) || (err == nil && expect_err) {
