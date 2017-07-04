@@ -7,7 +7,7 @@ import (
 )
 
 func testAnnot(t *testing.T, src string, expect Annot, expect_err bool) {
-	annot, err := NewAnnot(src)
+	annot, err := ParseAnnot(src)
 	fmt.Printf("%q:\n\texpect=%#v\n\tresult=%#v\n\texpect_err=%v\n\terr=%v\n",
 		src, expect, annot, expect_err, err)
 

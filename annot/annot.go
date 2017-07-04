@@ -6,7 +6,10 @@ import (
 	"strings"
 )
 
-// Annotation is some extra information(k/v) stored in comments.
+// Annotation is some extra information(k/v) stored in comments. Format:
+//   primaryKey[:primaryVal] key[:val] ...
+// Example:
+//   bind:name slice type:"sql.NullString"
 type Annot interface {
 	SetPrimary(val string) error
 	// Set non-primary key/val, if key == "", there will be no more
@@ -14,12 +17,9 @@ type Annot interface {
 	Set(key, val string) error
 }
 
-// Create annotation, format:
-//   primaryKey[:primaryVal] key[:val] ...
-// Example:
-//   param:name type:[]int attr:"hello world"
-func NewAnnot(src string) (Annot, error) {
-	fn := parseAnnot(src)
+// Parse annotation.
+func ParseAnnot(src string) (Annot, error) {
+	fn := parseAnnotString(src)
 
 	// The first key/val is primary key/val
 	primary_key, primary_val, err := fn()
@@ -69,7 +69,7 @@ var (
 	escape_re *regexp.Regexp = regexp.MustCompile(`\\.`)
 )
 
-func parseAnnot(src string) func() (string, string, error) {
+func parseAnnotString(src string) func() (string, string, error) {
 	remain := append([]byte(strings.TrimSpace(src)), ' ')
 	return func() (string, string, error) {
 		// drained
@@ -79,7 +79,7 @@ func parseAnnot(src string) func() (string, string, error) {
 
 		m := annot_re.FindSubmatch(remain)
 		if m == nil {
-			return "", "", fmt.Errorf("Illegal kv format near: %q", string(remain))
+			return "", "", fmt.Errorf("Illegal annot kv format near: %q", string(remain))
 		}
 
 		l := len(m[0])

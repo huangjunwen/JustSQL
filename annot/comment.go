@@ -11,9 +11,11 @@ type Comment struct {
 	Offset, Length int
 	// Stripped comment content
 	Content string
+	// Annotation in comment
+	Annot
 }
 
-// Scan SQL comments ('#...', '--...', '/*...*/').
+// Scan SQL comments ('#...', '--...', '/*...*/') and also parse annotation in comments.
 func ScanComment(src string) ([]Comment, error) {
 	i := 0
 	l := len(src)
@@ -31,13 +33,24 @@ func ScanComment(src string) ([]Comment, error) {
 		return false
 	}
 
-	add_comment := func(offset int, length int, content string) {
+	add_comment := func(offset int, length int, content string) (err error) {
 		content = strings.TrimSpace(content)
+
+		var annot Annot
+		if len(content) > 0 && content[0] == '$' {
+			annot, err = ParseAnnot(content[1:])
+			if err != nil {
+				return
+			}
+		}
+
 		comments = append(comments, Comment{
 			Offset:  offset,
 			Length:  length,
 			Content: content,
+			Annot:   annot,
 		})
+		return
 	}
 
 	for i < l {
@@ -68,7 +81,9 @@ func ScanComment(src string) ([]Comment, error) {
 		case '#':
 			offset := i
 			find('\n')
-			add_comment(offset, i-offset, src[offset+1:i])
+			if err := add_comment(offset, i-offset, src[offset+1:i]); err != nil {
+				return nil, err
+			}
 
 		// -- ... \n
 		case '-':
@@ -78,7 +93,9 @@ func ScanComment(src string) ([]Comment, error) {
 			}
 			offset := i
 			find('\n')
-			add_comment(offset, i-offset, src[offset+2:i])
+			if err := add_comment(offset, i-offset, src[offset+2:i]); err != nil {
+				return nil, err
+			}
 
 		// /* ... */
 		case '/':
@@ -97,7 +114,9 @@ func ScanComment(src string) ([]Comment, error) {
 					break
 				}
 			}
-			add_comment(offset, i-offset, src[offset+2:i-2])
+			if err := add_comment(offset, i-offset, src[offset+2:i-2]); err != nil {
+				return nil, err
+			}
 		}
 
 	}
