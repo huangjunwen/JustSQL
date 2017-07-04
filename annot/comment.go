@@ -31,11 +31,12 @@ func ScanComment(src string) ([]Comment, error) {
 		return false
 	}
 
-	addComment := func(offset int, length int, content string) {
+	add_comment := func(offset int, length int, content string) {
+		content = strings.TrimSpace(content)
 		comments = append(comments, Comment{
 			Offset:  offset,
 			Length:  length,
-			Content: strings.TrimSpace(content),
+			Content: content,
 		})
 	}
 
@@ -47,17 +48,27 @@ func ScanComment(src string) ([]Comment, error) {
 
 		// skip string literal
 		case '\'', '"':
-			j := scanStringLiteral(src, i)
-			if j < 0 {
+			enclosed := false
+			for i += 1; i < l; i += 1 {
+				if src[i] == c {
+					enclosed = true
+					i += 1
+					break
+				}
+				// escape
+				if src[i] == '\\' {
+					i += 1
+				}
+			}
+			if !enclosed {
 				return nil, errors.New("Bad string literal")
 			}
-			i = j
 
 		// # ... \n
 		case '#':
 			offset := i
 			find('\n')
-			addComment(offset, i-offset, src[offset+1:i])
+			add_comment(offset, i-offset, src[offset+1:i])
 
 		// -- ... \n
 		case '-':
@@ -67,7 +78,7 @@ func ScanComment(src string) ([]Comment, error) {
 			}
 			offset := i
 			find('\n')
-			addComment(offset, i-offset, src[offset+2:i])
+			add_comment(offset, i-offset, src[offset+2:i])
 
 		// /* ... */
 		case '/':
@@ -86,34 +97,9 @@ func ScanComment(src string) ([]Comment, error) {
 					break
 				}
 			}
-			addComment(offset, i-offset, src[offset+2:i-2])
+			add_comment(offset, i-offset, src[offset+2:i-2])
 		}
 
 	}
 	return comments, nil
-}
-
-// Scan string literal at s[i:] and return the offset of the
-// end of string literal or -1 if the string is illegal.
-func scanStringLiteral(s string, i int) int {
-	l := len(s)
-	c := s[i]
-
-	if c != '\'' && c != '"' {
-		return -1
-	}
-
-	for i += 1; i < l; i += 1 {
-		// enclosed
-		if s[i] == c {
-			return i + 1
-		}
-		// escape
-		if s[i] == '\\' {
-			i += 1
-		}
-	}
-
-	return -1
-
 }

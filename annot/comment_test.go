@@ -8,11 +8,13 @@ import (
 
 func testScanComment(t *testing.T, src string, expect []Comment, expect_err bool) {
 	res, err := ScanComment(src)
+	fmt.Printf("%q:\n\texpect=%+v\n\tresult=%+v\n\texpect_err=%v\n\terr=%v\n",
+		src, expect, res, expect_err, err)
+
 	if (err != nil && !expect_err) || (err == nil && expect_err) {
 		t.Errorf("%q: expect_err=%v, err=%v\n", src, expect_err, err)
 		return
 	}
-	fmt.Printf("%q: expect=%v result=%v\n", src, expect, res)
 	if !reflect.DeepEqual(res, expect) {
 		t.Errorf("%q: scan failed\n", src)
 		return
@@ -136,6 +138,15 @@ func TestStringLiteral(t *testing.T) {
 			Offset:  23,
 			Length:  6,
 			Content: "",
+		},
+	}, false)
+	testScanComment(t, "'", nil, true)
+	testScanComment(t, "'\\''", []Comment{}, false)
+	testScanComment(t, "'\\''# ...", []Comment{
+		Comment{
+			Offset:  4,
+			Length:  5,
+			Content: "...",
 		},
 	}, false)
 }
