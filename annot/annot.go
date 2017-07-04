@@ -1,4 +1,4 @@
-package lex
+package annot
 
 import (
 	"fmt"
@@ -7,9 +7,10 @@ import (
 )
 
 var (
-	// KV format: key[:val]
+	// KV format:
+	//   key1[:val1] key2[:val2] ...
 	// Example:
-	//   param:name type:int attr:"hello world"
+	//   param:name type:[]int attr:"hello world"
 	kv_re     *regexp.Regexp = regexp.MustCompile(`^([A-z][0-9A-z_]*)(:(("[^"\\]*(?:\\.[^"\\]*)*")|([^\s:"]+)))?\s+`)
 	escape_re *regexp.Regexp = regexp.MustCompile(`\\.`)
 )
