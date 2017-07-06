@@ -29,5 +29,6 @@ func TestTypeEnv(t *testing.T) {
 	testTypeEnv(t, env, "sql:NullString", "sql.NullString", false)
 	testTypeEnv(t, env, "github.com/go-sql-driver/mysql:NullTime", "mysql.NullTime", false)
 	testTypeEnv(t, env, "github.com/pingcap/tidb/mysql:SQLError", "mysql_1.SQLError", false)
+	testTypeEnv(t, env, "github.com/pingcap/tidb/mysql.invalid:SQLError", "", true)
 
 }
