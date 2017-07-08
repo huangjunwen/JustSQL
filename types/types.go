@@ -131,9 +131,9 @@ func (ctx *TypeContext) OverrideAdaptType(tp_str string, tn *TypeName) error {
 	return nil
 }
 
-// Override some common field adapt types for MySQL (so generated code
+// Change datetime/date/timestamp adapt type using 'mysql.NullTime' (generated code
 // depends on "github.com/go-sql-driver/mysql")
-func (ctx *TypeContext) OverrideCommonMySQLAdaptType() error {
+func (ctx *TypeContext) UseMySQLNullTime() error {
 	tn, err := ctx.CreateTypeName("github.com/go-sql-driver/mysql", "NullTime")
 	if err != nil {
 		return err
