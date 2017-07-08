@@ -127,7 +127,7 @@ func (ctx *TypeContext) ParseTypeName(s string) (*TypeName, error) {
 //   ctx.OverrideAdaptType("date", tn)
 //   ctx.OverrideAdaptType("timestamp", tn)
 func (ctx *TypeContext) OverrideAdaptType(tp_str string, tn *TypeName) {
-	ctx.overrideAdaptTypes[tp_str] = tn
+	ctx.overrideAdaptTypes[strings.ToLower(tp_str)] = tn
 }
 
 // Find a type suitable to store database field type.
@@ -141,7 +141,7 @@ func (ctx *TypeContext) AdaptFieldType(ft *ts.FieldType) (*TypeName, error) {
 	unsigned := mysql.HasUnsignedFlag(flag)
 	binary := mysql.HasBinaryFlag(flag)
 
-	if tn, ok := ctx.overrideAdaptTypes[ts.TypeToStr(ft.Tp, ft.Charset)]; ok {
+	if tn, ok := ctx.overrideAdaptTypes[strings.ToLower(ts.TypeToStr(ft.Tp, ft.Charset))]; ok {
 		return tn, nil
 	}
 

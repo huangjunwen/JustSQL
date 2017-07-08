@@ -2,6 +2,7 @@ package annot
 
 import (
 	"fmt"
+	"github.com/huangjunwen/JustSQL/utils"
 	"regexp"
 	"strings"
 )
@@ -131,15 +132,11 @@ type BindAnnot struct {
 	Slice bool
 }
 
-var (
-	ident_re *regexp.Regexp = regexp.MustCompile(`^[A-z_][0-9A-z_]*$`)
-)
-
 func (a *BindAnnot) SetPrimary(val string) error {
 	if val == "" {
 		return fmt.Errorf("bind: missing bind name")
 	}
-	if !ident_re.MatchString(val) {
+	if !utils.IsIdent(val) {
 		return fmt.Errorf("bind: bind name %q is not a valid identifier", val)
 	}
 	a.Name = val

@@ -17,7 +17,7 @@ func init() {
 	log.SetLevelByString("error")
 }
 
-// Use TiDB as an embeded database to execute or compile SQLs.
+// Use TiDB as an embeded database to execute or parse SQLs.
 type EmbedDB struct {
 	Store kv.Storage
 	Sess  tidb.Session
