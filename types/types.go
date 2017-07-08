@@ -97,13 +97,13 @@ func (ctx *TypeContext) CreateTypeName(pkg_path, type_name string) (*TypeName, e
 	}, nil
 }
 
-// Create TypeName from colon seperated format:
+// Create TypeName from colon-seperated spec:
 //   [full_pkg_path:]type
 // Example:
 //   "[]byte"
 //   "sql:NullString"
 //   "github.com/go-sql-driver/mysql:NullTime"
-func (ctx *TypeContext) ParseTypeName(s string) (*TypeName, error) {
+func (ctx *TypeContext) CreateTypeNameFromSpec(s string) (*TypeName, error) {
 	var pkg_path, type_name string
 	i := strings.LastIndex(s, ":")
 	if i < 0 {
@@ -145,7 +145,7 @@ func (ctx *TypeContext) UseMySQLNullTime() error {
 }
 
 // Find a type suitable to store database field type.
-func (ctx *TypeContext) FieldAdaptType(ft *ts.FieldType) (*TypeName, error) {
+func (ctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 	// see: github.com/pingcap/tidb/mysql/type.go and github.com/pingcap/tidb/util/types/field_type.go
 	cls := ft.ToClass()
 	tp := ft.Tp

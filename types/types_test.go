@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func testParseTypeName(t *testing.T, ctx *TypeContext, type_string string, expect string, expect_err bool) {
-	tn, err := ctx.ParseTypeName(type_string)
+func testCreateTypeNameFromSpec(t *testing.T, ctx *TypeContext, type_string string, expect string, expect_err bool) {
+	tn, err := ctx.CreateTypeNameFromSpec(type_string)
 	fmt.Printf("%q:\n\texpect=%q\n\tresult=%q %#v\n\texpect_err=%v\n\terr=%v\n",
 		type_string, expect, tn, tn, expect_err, err)
 
@@ -25,10 +25,10 @@ func testParseTypeName(t *testing.T, ctx *TypeContext, type_string string, expec
 func TestTypeContext(t *testing.T) {
 	fmt.Println("TestParsing")
 	ctx := NewTypeContext()
-	testParseTypeName(t, ctx, "[]int", "[]int", false)
-	testParseTypeName(t, ctx, "sql:NullString", "sql.NullString", false)
-	testParseTypeName(t, ctx, "github.com/go-sql-driver/mysql:NullTime", "mysql.NullTime", false)
-	testParseTypeName(t, ctx, "github.com/pingcap/tidb/mysql:SQLError", "mysql_1.SQLError", false)
-	testParseTypeName(t, ctx, "github.com/pingcap/tidb/mysql.invalid:SQLError", "", true)
+	testCreateTypeNameFromSpec(t, ctx, "[]int", "[]int", false)
+	testCreateTypeNameFromSpec(t, ctx, "sql:NullString", "sql.NullString", false)
+	testCreateTypeNameFromSpec(t, ctx, "github.com/go-sql-driver/mysql:NullTime", "mysql.NullTime", false)
+	testCreateTypeNameFromSpec(t, ctx, "github.com/pingcap/tidb/mysql:SQLError", "mysql_1.SQLError", false)
+	testCreateTypeNameFromSpec(t, ctx, "github.com/pingcap/tidb/mysql.invalid:SQLError", "", true)
 
 }
