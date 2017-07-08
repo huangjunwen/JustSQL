@@ -28,7 +28,7 @@ func (n *TypeName) String() string {
 
 // Type associated information.
 type TypeContext struct {
-	// Map full pkg path <-> unique name
+	// Map pkg path <-> pkg name
 	pkgPath2Name map[string]string
 	name2PkgPath map[string]string
 
@@ -82,7 +82,7 @@ func (ctx *TypeContext) AddPkg(pkg_path string) (string, error) {
 //   ctx.CreateTypeName("sql", "NullString")
 func (ctx *TypeContext) CreateTypeName(pkg_path, type_name string) (*TypeName, error) {
 	if type_name == "" {
-		return nil, fmt.Errorf("Missing type name after ':'")
+		return nil, fmt.Errorf("Missing type name")
 	}
 
 	pkg_name, err := ctx.AddPkg(pkg_path)
@@ -119,19 +119,33 @@ func (ctx *TypeContext) ParseTypeName(s string) (*TypeName, error) {
 
 // Override the adapt type for specific database type (tp_str).
 // Example:
-//   tn, err := ctx.ParseTypeName("github.com/go-sql-driver/mysql:NullTime")
+//   tn, err := ctx.CreateTypeName("github.com/go-sql-driver/mysql", "NullTime")
 //   if err != nil {
 //     ...
 //   }
 //   ctx.OverrideAdaptType("datetime", tn)
 //   ctx.OverrideAdaptType("date", tn)
 //   ctx.OverrideAdaptType("timestamp", tn)
-func (ctx *TypeContext) OverrideAdaptType(tp_str string, tn *TypeName) {
+func (ctx *TypeContext) OverrideAdaptType(tp_str string, tn *TypeName) error {
 	ctx.overrideAdaptTypes[strings.ToLower(tp_str)] = tn
+	return nil
+}
+
+// Override some common field adapt types for MySQL (so generated code
+// depends on "github.com/go-sql-driver/mysql")
+func (ctx *TypeContext) OverrideCommonMySQLAdaptType() error {
+	tn, err := ctx.CreateTypeName("github.com/go-sql-driver/mysql", "NullTime")
+	if err != nil {
+		return err
+	}
+	ctx.OverrideAdaptType("datetime", tn)
+	ctx.OverrideAdaptType("date", tn)
+	ctx.OverrideAdaptType("timestamp", tn)
+	return nil
 }
 
 // Find a type suitable to store database field type.
-func (ctx *TypeContext) AdaptFieldType(ft *ts.FieldType) (*TypeName, error) {
+func (ctx *TypeContext) FieldAdaptType(ft *ts.FieldType) (*TypeName, error) {
 	// see: github.com/pingcap/tidb/mysql/type.go and github.com/pingcap/tidb/util/types/field_type.go
 	cls := ft.ToClass()
 	tp := ft.Tp
@@ -147,8 +161,8 @@ func (ctx *TypeContext) AdaptFieldType(ft *ts.FieldType) (*TypeName, error) {
 
 	switch cls {
 	case ts.ClassInt:
-		// Bit is special. Can be up to 64-bit and bit(1) means bool
-		if tp == mysql.TypeBit {
+		switch tp {
+		case mysql.TypeBit: // bit
 			if flen == 1 {
 				if nullable {
 					return ctx.CreateTypeName("sql", "NullBool")
@@ -160,6 +174,7 @@ func (ctx *TypeContext) AdaptFieldType(ft *ts.FieldType) (*TypeName, error) {
 			if nullable {
 				return ctx.CreateTypeName("sql", "NullInt64")
 			}
+
 			if flen <= 8 {
 				return ctx.CreateTypeName("", "uint8")
 			} else if flen <= 16 {
@@ -169,39 +184,63 @@ func (ctx *TypeContext) AdaptFieldType(ft *ts.FieldType) (*TypeName, error) {
 			} else {
 				return ctx.CreateTypeName("", "uint64")
 			}
-		}
 
-		if nullable {
-			return ctx.CreateTypeName("sql", "NullInt64")
-		}
-
-		switch tp {
 		case mysql.TypeTiny: // tinyint
+			// tinyint(1) also means bool
+			if flen == 1 {
+				if nullable {
+					return ctx.CreateTypeName("sql", "NullBool")
+				} else {
+					return ctx.CreateTypeName("", "bool")
+				}
+			}
+
+			if nullable {
+				return ctx.CreateTypeName("sql", "NullInt64")
+			}
+
 			if unsigned {
 				return ctx.CreateTypeName("", "uint8")
 			} else {
 				return ctx.CreateTypeName("", "int8")
 			}
+
 		case mysql.TypeShort: // smallint
+			if nullable {
+				return ctx.CreateTypeName("sql", "NullInt64")
+			}
+
 			if unsigned {
 				return ctx.CreateTypeName("", "uint16")
 			} else {
 				return ctx.CreateTypeName("", "int16")
 			}
+
 		case mysql.TypeInt24: // mediumint
 			fallthrough
+
 		case mysql.TypeLong: // int
+			if nullable {
+				return ctx.CreateTypeName("sql", "NullInt64")
+			}
+
 			if unsigned {
 				return ctx.CreateTypeName("", "uint32")
 			} else {
 				return ctx.CreateTypeName("", "int32")
 			}
+
 		case mysql.TypeLonglong: // bigint
+			if nullable {
+				return ctx.CreateTypeName("sql", "NullInt64")
+			}
+
 			if unsigned {
 				return ctx.CreateTypeName("", "uint64")
 			} else {
 				return ctx.CreateTypeName("", "int64")
 			}
+
 		case mysql.TypeYear:
 			// 16-bit is enough for yyyy
 			return ctx.CreateTypeName("", "uint16")
