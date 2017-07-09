@@ -66,7 +66,7 @@ func ParseAnnot(src string) (Annot, error) {
 }
 
 var (
-	annot_re  *regexp.Regexp = regexp.MustCompile(`^([A-z][0-9A-z_]*)(:(("[^"\\]*(?:\\.[^"\\]*)*")|([^\s:"]+)))?\s+`)
+	annot_re  *regexp.Regexp = regexp.MustCompile(`^([A-Za-z][0-9A-Za-z_]*)(:(("[^"\\]*(?:\\.[^"\\]*)*")|([^\s:"]+)))?\s+`)
 	escape_re *regexp.Regexp = regexp.MustCompile(`\\.`)
 )
 
