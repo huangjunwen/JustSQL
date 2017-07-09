@@ -117,7 +117,7 @@ func (tctx *TypeContext) CreateTypeNameFromSpec(s string) (*TypeName, error) {
 	return tctx.CreateTypeName(pkg_path, type_name)
 }
 
-// Override the adapt type for specific database type (tp_str).
+// Override the adapt type for specific database field type.
 // Example:
 //   tn, err := tctx.CreateTypeName("github.com/go-sql-driver/mysql", "NullTime")
 //   if err != nil {
@@ -131,7 +131,7 @@ func (tctx *TypeContext) OverrideAdaptType(tp_str string, tn *TypeName) error {
 	return nil
 }
 
-// Change datetime/date/timestamp adapt type using 'mysql.NullTime' (generated code
+// Use 'mysql.NullTime' for datetime/date/timestamp field type (generated code
 // depends on "github.com/go-sql-driver/mysql")
 func (tctx *TypeContext) UseMySQLNullTime() error {
 	tn, err := tctx.CreateTypeName("github.com/go-sql-driver/mysql", "NullTime")
@@ -144,7 +144,7 @@ func (tctx *TypeContext) UseMySQLNullTime() error {
 	return nil
 }
 
-// Find a type suitable to store database field type.
+// Main method of TypeContext. Find a type suitable to store database field type.
 func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 	// see: github.com/pingcap/tidb/mysql/type.go and github.com/pingcap/tidb/util/types/field_type.go
 	cls := ft.ToClass()
