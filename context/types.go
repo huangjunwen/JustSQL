@@ -1,4 +1,4 @@
-package types
+package context
 
 import (
 	"fmt"
@@ -45,15 +45,15 @@ func NewTypeContext() *TypeContext {
 }
 
 // Add and get a unique package name from its path.
-func (ctx *TypeContext) AddPkg(pkg_path string) (string, error) {
+func (tctx *TypeContext) AddPkg(pkg_path string) (string, error) {
 	// Check exists.
-	if name, ok := ctx.pkgPath2Name[pkg_path]; ok {
+	if name, ok := tctx.pkgPath2Name[pkg_path]; ok {
 		return name, nil
 	}
 	// Special case for builtin.
 	if pkg_path == "" {
-		ctx.pkgPath2Name[""] = ""
-		ctx.name2PkgPath[""] = ""
+		tctx.pkgPath2Name[""] = ""
+		tctx.name2PkgPath[""] = ""
 		return "", nil
 	}
 	// Try to use the base component as package name.
@@ -61,17 +61,17 @@ func (ctx *TypeContext) AddPkg(pkg_path string) (string, error) {
 	if !utils.IsIdent(base) {
 		return "", fmt.Errorf("Bad package path: %q", pkg_path)
 	}
-	if _, ok := ctx.name2PkgPath[base]; !ok {
-		ctx.pkgPath2Name[pkg_path] = base
-		ctx.name2PkgPath[base] = pkg_path
+	if _, ok := tctx.name2PkgPath[base]; !ok {
+		tctx.pkgPath2Name[pkg_path] = base
+		tctx.name2PkgPath[base] = pkg_path
 		return base, nil
 	}
 	// Name conflict. Add a number suffix to resolve it.
 	for i := 1; ; i += 1 {
 		n := fmt.Sprintf("%s_%d", base, i)
-		if _, ok := ctx.name2PkgPath[n]; !ok {
-			ctx.pkgPath2Name[pkg_path] = n
-			ctx.name2PkgPath[n] = pkg_path
+		if _, ok := tctx.name2PkgPath[n]; !ok {
+			tctx.pkgPath2Name[pkg_path] = n
+			tctx.name2PkgPath[n] = pkg_path
 			return n, nil
 		}
 	}
@@ -79,13 +79,13 @@ func (ctx *TypeContext) AddPkg(pkg_path string) (string, error) {
 
 // Create TypeName from its package path and type name.
 // Example:
-//   ctx.CreateTypeName("sql", "NullString")
-func (ctx *TypeContext) CreateTypeName(pkg_path, type_name string) (*TypeName, error) {
+//   tctx.CreateTypeName("sql", "NullString")
+func (tctx *TypeContext) CreateTypeName(pkg_path, type_name string) (*TypeName, error) {
 	if type_name == "" {
 		return nil, fmt.Errorf("Missing type name")
 	}
 
-	pkg_name, err := ctx.AddPkg(pkg_path)
+	pkg_name, err := tctx.AddPkg(pkg_path)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func (ctx *TypeContext) CreateTypeName(pkg_path, type_name string) (*TypeName, e
 //   "[]byte"
 //   "sql:NullString"
 //   "github.com/go-sql-driver/mysql:NullTime"
-func (ctx *TypeContext) CreateTypeNameFromSpec(s string) (*TypeName, error) {
+func (tctx *TypeContext) CreateTypeNameFromSpec(s string) (*TypeName, error) {
 	var pkg_path, type_name string
 	i := strings.LastIndex(s, ":")
 	if i < 0 {
@@ -114,38 +114,38 @@ func (ctx *TypeContext) CreateTypeNameFromSpec(s string) (*TypeName, error) {
 		type_name = s[i+1:]
 	}
 
-	return ctx.CreateTypeName(pkg_path, type_name)
+	return tctx.CreateTypeName(pkg_path, type_name)
 }
 
 // Override the adapt type for specific database type (tp_str).
 // Example:
-//   tn, err := ctx.CreateTypeName("github.com/go-sql-driver/mysql", "NullTime")
+//   tn, err := tctx.CreateTypeName("github.com/go-sql-driver/mysql", "NullTime")
 //   if err != nil {
 //     ...
 //   }
-//   ctx.OverrideAdaptType("datetime", tn)
-//   ctx.OverrideAdaptType("date", tn)
-//   ctx.OverrideAdaptType("timestamp", tn)
-func (ctx *TypeContext) OverrideAdaptType(tp_str string, tn *TypeName) error {
-	ctx.overrideAdaptTypes[strings.ToLower(tp_str)] = tn
+//   tctx.OverrideAdaptType("datetime", tn)
+//   tctx.OverrideAdaptType("date", tn)
+//   tctx.OverrideAdaptType("timestamp", tn)
+func (tctx *TypeContext) OverrideAdaptType(tp_str string, tn *TypeName) error {
+	tctx.overrideAdaptTypes[strings.ToLower(tp_str)] = tn
 	return nil
 }
 
 // Change datetime/date/timestamp adapt type using 'mysql.NullTime' (generated code
 // depends on "github.com/go-sql-driver/mysql")
-func (ctx *TypeContext) UseMySQLNullTime() error {
-	tn, err := ctx.CreateTypeName("github.com/go-sql-driver/mysql", "NullTime")
+func (tctx *TypeContext) UseMySQLNullTime() error {
+	tn, err := tctx.CreateTypeName("github.com/go-sql-driver/mysql", "NullTime")
 	if err != nil {
 		return err
 	}
-	ctx.OverrideAdaptType("datetime", tn)
-	ctx.OverrideAdaptType("date", tn)
-	ctx.OverrideAdaptType("timestamp", tn)
+	tctx.OverrideAdaptType("datetime", tn)
+	tctx.OverrideAdaptType("date", tn)
+	tctx.OverrideAdaptType("timestamp", tn)
 	return nil
 }
 
 // Find a type suitable to store database field type.
-func (ctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
+func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 	// see: github.com/pingcap/tidb/mysql/type.go and github.com/pingcap/tidb/util/types/field_type.go
 	cls := ft.ToClass()
 	tp := ft.Tp
@@ -155,7 +155,7 @@ func (ctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 	unsigned := mysql.HasUnsignedFlag(flag)
 	binary := mysql.HasBinaryFlag(flag)
 
-	if tn, ok := ctx.overrideAdaptTypes[strings.ToLower(ts.TypeToStr(ft.Tp, ft.Charset))]; ok {
+	if tn, ok := tctx.overrideAdaptTypes[strings.ToLower(ts.TypeToStr(ft.Tp, ft.Charset))]; ok {
 		return tn, nil
 	}
 
@@ -165,55 +165,55 @@ func (ctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 		case mysql.TypeBit: // bit
 			if flen == 1 {
 				if nullable {
-					return ctx.CreateTypeName("sql", "NullBool")
+					return tctx.CreateTypeName("sql", "NullBool")
 				} else {
-					return ctx.CreateTypeName("", "bool")
+					return tctx.CreateTypeName("", "bool")
 				}
 			}
 
 			if nullable {
-				return ctx.CreateTypeName("sql", "NullInt64")
+				return tctx.CreateTypeName("sql", "NullInt64")
 			}
 
 			if flen <= 8 {
-				return ctx.CreateTypeName("", "uint8")
+				return tctx.CreateTypeName("", "uint8")
 			} else if flen <= 16 {
-				return ctx.CreateTypeName("", "uint16")
+				return tctx.CreateTypeName("", "uint16")
 			} else if flen <= 32 {
-				return ctx.CreateTypeName("", "uint32")
+				return tctx.CreateTypeName("", "uint32")
 			} else {
-				return ctx.CreateTypeName("", "uint64")
+				return tctx.CreateTypeName("", "uint64")
 			}
 
 		case mysql.TypeTiny: // tinyint
 			// tinyint(1) also means bool
 			if flen == 1 {
 				if nullable {
-					return ctx.CreateTypeName("sql", "NullBool")
+					return tctx.CreateTypeName("sql", "NullBool")
 				} else {
-					return ctx.CreateTypeName("", "bool")
+					return tctx.CreateTypeName("", "bool")
 				}
 			}
 
 			if nullable {
-				return ctx.CreateTypeName("sql", "NullInt64")
+				return tctx.CreateTypeName("sql", "NullInt64")
 			}
 
 			if unsigned {
-				return ctx.CreateTypeName("", "uint8")
+				return tctx.CreateTypeName("", "uint8")
 			} else {
-				return ctx.CreateTypeName("", "int8")
+				return tctx.CreateTypeName("", "int8")
 			}
 
 		case mysql.TypeShort: // smallint
 			if nullable {
-				return ctx.CreateTypeName("sql", "NullInt64")
+				return tctx.CreateTypeName("sql", "NullInt64")
 			}
 
 			if unsigned {
-				return ctx.CreateTypeName("", "uint16")
+				return tctx.CreateTypeName("", "uint16")
 			} else {
-				return ctx.CreateTypeName("", "int16")
+				return tctx.CreateTypeName("", "int16")
 			}
 
 		case mysql.TypeInt24: // mediumint
@@ -221,57 +221,57 @@ func (ctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 
 		case mysql.TypeLong: // int
 			if nullable {
-				return ctx.CreateTypeName("sql", "NullInt64")
+				return tctx.CreateTypeName("sql", "NullInt64")
 			}
 
 			if unsigned {
-				return ctx.CreateTypeName("", "uint32")
+				return tctx.CreateTypeName("", "uint32")
 			} else {
-				return ctx.CreateTypeName("", "int32")
+				return tctx.CreateTypeName("", "int32")
 			}
 
 		case mysql.TypeLonglong: // bigint
 			if nullable {
-				return ctx.CreateTypeName("sql", "NullInt64")
+				return tctx.CreateTypeName("sql", "NullInt64")
 			}
 
 			if unsigned {
-				return ctx.CreateTypeName("", "uint64")
+				return tctx.CreateTypeName("", "uint64")
 			} else {
-				return ctx.CreateTypeName("", "int64")
+				return tctx.CreateTypeName("", "int64")
 			}
 
 		case mysql.TypeYear:
 			// 16-bit is enough for yyyy
-			return ctx.CreateTypeName("", "uint16")
+			return tctx.CreateTypeName("", "uint16")
 		}
 
 	case ts.ClassReal:
 		if nullable {
-			return ctx.CreateTypeName("sql", "NullFloat64")
+			return tctx.CreateTypeName("sql", "NullFloat64")
 		}
 		switch tp {
 		case mysql.TypeFloat: // float
-			return ctx.CreateTypeName("", "float32")
+			return tctx.CreateTypeName("", "float32")
 		case mysql.TypeDouble: // double
-			return ctx.CreateTypeName("", "float64")
+			return tctx.CreateTypeName("", "float64")
 		}
 
 	// NOTE: it is STRONGLY recommended to use precise type to store decimal.
 	case ts.ClassDecimal:
 		if nullable {
-			return ctx.CreateTypeName("sql", "NullFloat64")
+			return tctx.CreateTypeName("sql", "NullFloat64")
 		}
-		return ctx.CreateTypeName("", "float64")
+		return tctx.CreateTypeName("", "float64")
 
 	case ts.ClassString:
 		if binary {
-			return ctx.CreateTypeName("", "[]byte")
+			return tctx.CreateTypeName("", "[]byte")
 		}
 		if nullable {
-			return ctx.CreateTypeName("sql", "NullString")
+			return tctx.CreateTypeName("sql", "NullString")
 		}
-		return ctx.CreateTypeName("", "string")
+		return tctx.CreateTypeName("", "string")
 
 	}
 

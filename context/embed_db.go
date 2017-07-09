@@ -1,4 +1,4 @@
-package embed_db
+package context
 
 import (
 	"github.com/ngaut/log"
