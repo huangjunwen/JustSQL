@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"github.com/pingcap/tidb/model"
 	"regexp"
 	"strings"
 )
@@ -21,4 +22,21 @@ func CamelCase(s string) string {
 		parts = append(parts, strings.ToUpper(m[1]), m[2])
 	}
 	return strings.Join(parts, "")
+}
+
+// String and its variants. (CamelCase/...)
+type Str struct {
+	O         string
+	CamelCase string
+}
+
+func NewStr(s string) Str {
+	return Str{
+		O:         s,
+		CamelCase: CamelCase(s),
+	}
+}
+
+func NewStrFromCIStr(ci model.CIStr) Str {
+	return NewStr(ci.O)
 }
