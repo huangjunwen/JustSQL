@@ -2,35 +2,128 @@ package context
 
 import (
 	"fmt"
-	"github.com/huangjunwen/JustSQL/utils"
 	"github.com/pingcap/tidb/mysql"
 	ts "github.com/pingcap/tidb/util/types"
 	"path"
+	"regexp"
 	"strings"
 )
 
 // TypeName represents a Go type in literal.
 type TypeName struct {
-	// In which scope (file) this type is used.
-	Scope string
+	// Context in which this TypeName is created.
+	typeContext *TypeContext
+
 	// Full import path, empty if it's builtin or in current package.
 	PkgPath string
-	// Name for the package and type.
-	PkgName  string
+
+	// Name of the type.
 	TypeName string
 }
 
-// Type associated information for a (file) scope.
-type typeScope struct {
+// Return "PkgName.TypeName". NOTE: PkgName is dynamicly determined by
+// current scope. For example, "github.com/go-sql-driver/mysql:NullTime" maybe
+// render as "mysql.NullTime" in one scope or "mysql_1.NullTime" in another
+// scope due to name conflict.
+func (tn *TypeName) String() string {
+	if tn.PkgPath == "" {
+		return tn.TypeName
+	}
+	pkg_name := tn.typeContext.currScope.UsePkg(tn.PkgPath)
+	return fmt.Sprintf("%s.%s", pkg_name, tn.TypeName)
+}
+
+// Mainly used to resolve package names conflict in (file) scope.
+type TypeScope struct {
 	// Scope name.
 	scopeName string
 
-	// Pkg path -> pkg name (can be '_')
+	// Pkg path -> pkg name.
+	// If pkg name == "", means the package is not used yet (maybe it is
+	// import-only package, like github.com/go-sql-driver/mysql)
 	pkgPaths map[string]string
 
-	// Pkg name -> pkg path. NOTE: len(pkgNames) <= len(pkgPaths) since maybe
-	// some packages are imported only.
+	// Pkg name -> pkg path. NOTE: len(pkgNames) <= len(pkgPaths)
 	pkgNames map[string]string
+}
+
+func NewTypeScope(name string) *TypeScope {
+	return &TypeScope{
+		scopeName: name,
+		pkgPaths:  make(map[string]string),
+		pkgNames:  make(map[string]string),
+	}
+}
+
+// Import a package into the (file) scope.
+func (scope *TypeScope) ImportPkg(pkg_path string) {
+	// Do nothing for builtin or current package.
+	if pkg_path == "" {
+		return
+	}
+
+	// Add to pkgPaths.
+	if _, ok := scope.pkgPaths[pkg_path]; !ok {
+		scope.pkgPaths[pkg_path] = ""
+	}
+
+}
+
+var ident_re *regexp.Regexp = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_]*)`)
+
+// Use package and return a unique pakcage name in the (file) scope.
+func (scope *TypeScope) UsePkg(pkg_path string) string {
+	// Builtin or current package.
+	if pkg_path == "" {
+		return ""
+	}
+
+	// pkg_name already determined.
+	pkg_name, ok := scope.pkgPaths[pkg_path]
+	if pkg_name != "" {
+		return pkg_name
+	}
+
+	// Import if not yet.
+	if !ok {
+		scope.ImportPkg(pkg_path)
+	}
+
+	// Then determin package name.
+	base := strings.ToLower(ident_re.FindString(path.Base(pkg_path)))
+	if base == "" {
+		base = "pkg"
+	}
+
+	// Resolve name conflict.
+	pkg_name = base
+	i := 0
+	for {
+		if _, ok := scope.pkgNames[pkg_name]; !ok {
+			scope.pkgPaths[pkg_path] = pkg_name
+			scope.pkgNames[pkg_name] = pkg_path
+			return pkg_name
+		}
+		// Name conflict. Add a number suffix.
+		i += 1
+		pkg_name = fmt.Sprintf("%s_%d", base, i)
+	}
+}
+
+// List (pkg_path, pkg_name) in the (file) scope. pkg_name will be "_"
+// if the package is import-only.
+func (scope *TypeScope) ListPkg() [][]string {
+	ret := make([][]string, 0, len(scope.pkgPaths))
+	for pkg_path, pkg_name := range scope.pkgPaths {
+		if pkg_name == "" {
+			pkg_name = "_"
+		}
+		ret = append(ret, []string{
+			pkg_path,
+			pkg_name,
+		})
+	}
+	return ret
 }
 
 // Type associated information.
@@ -38,41 +131,24 @@ type TypeContext struct {
 	// ts.TypeToStr(*ts.FieldType.Tp) -> TypeName
 	overridedAdaptTypes map[string]*TypeName
 
-	currScope *typeScope
-	scopes    map[string]*typeScope
-}
-
-// Return "PkgName.TypeName"
-func (tn *TypeName) String() string {
-	if tn.PkgName == "" {
-		return tn.TypeName
-	}
-	return fmt.Sprintf("%s.%s", tn.PkgName, tn.TypeName)
+	currScope *TypeScope
+	scopes    map[string]*TypeScope
 }
 
 func NewTypeContext() *TypeContext {
 	ret := &TypeContext{
 		overridedAdaptTypes: make(map[string]*TypeName),
 		currScope:           nil,
-		scopes:              make(map[string]*typeScope),
+		scopes:              make(map[string]*TypeScope),
 	}
+	// Switch to default scope.
+	ret.SwitchScope("")
 	return ret
 }
 
-func (tctx *TypeContext) checkScope() *typeScope {
-	if tctx.currScope == nil {
-		panic(fmt.Errorf("currScope == nil. Please EnterScope first."))
-	}
+// Return current (file) scope.
+func (tctx *TypeContext) CurrScope() *TypeScope {
 	return tctx.currScope
-}
-
-// Return all (file) scope names.
-func (tctx *TypeContext) ListScope() []string {
-	ret := make([]string, 0, len(tctx.scopes))
-	for name, _ := range tctx.scopes {
-		ret = append(ret, name)
-	}
-	return ret
 }
 
 // Switch to a (file) scope.
@@ -82,91 +158,23 @@ func (tctx *TypeContext) SwitchScope(scope_name string) {
 		return
 	}
 
-	curr := &typeScope{
-		scopeName: scope_name,
-		pkgPaths:  make(map[string]string),
-		pkgNames:  make(map[string]string),
-	}
+	curr := NewTypeScope(scope_name)
 	tctx.scopes[scope_name] = curr
 	tctx.currScope = curr
 }
 
-// Add pakcage to current (file) scope and return a unique package
-// name. If the package is imported only (not used), then return '_'.
-func (tctx *TypeContext) AddPkg(pkg_path string, import_only bool) (string, error) {
-	scope := tctx.checkScope()
-
-	// Check exists.
-	if name, ok := scope.pkgPaths[pkg_path]; ok {
-		return name, nil
-	}
-
-	// For builtin or current package.
-	if pkg_path == "" {
-		return "", nil
-	}
-
-	// If import_only == true, only add to pkgPaths
-	if import_only {
-		scope.pkgPaths[pkg_path] = "_"
-		return "_", nil
-	}
-
-	// Try to use the base component as package name.
-	base := path.Base(pkg_path)
-	if !utils.IsIdent(base) {
-		return "", fmt.Errorf("Bad package path: %q", pkg_path)
-	}
-
-	name := base
-	i := 0
-	for {
-		if _, ok := scope.pkgNames[name]; !ok {
-			scope.pkgPaths[pkg_path] = name
-			scope.pkgNames[name] = pkg_path
-			return name, nil
-		}
-		// Name conflict. Add a number suffix.
-		i += 1
-		name = fmt.Sprintf("%s_%d", base, i)
-	}
-}
-
-// List all packages in current (file) scope. Returns a list of [pkg_path, pkg_name].
-func (tctx *TypeContext) ListPkg() [][]string {
-	scope := tctx.checkScope()
-	ret := make([][]string, 0, len(scope.pkgPaths))
-	for pkg_path, pkg_name := range scope.pkgPaths {
-		ret = append(ret, []string{
-			pkg_path,
-			pkg_name,
-		})
-	}
-	return ret
-}
-
-// Create TypeName from its package path and type name in current (file) scope.
+// Create TypeName from its package path and type name.
 // Example:
 //   tctx.CreateTypeName("sql", "NullString")
 func (tctx *TypeContext) CreateTypeName(pkg_path, type_name string) (*TypeName, error) {
-	if type_name == "" {
-		return nil, fmt.Errorf("Missing type name")
-	}
-
-	pkg_name, err := tctx.AddPkg(pkg_path, false)
-	if err != nil {
-		return nil, err
-	}
-
 	return &TypeName{
-		Scope:    tctx.currScope.scopeName,
-		PkgPath:  pkg_path,
-		PkgName:  pkg_name,
-		TypeName: type_name,
+		typeContext: tctx,
+		PkgPath:     pkg_path,
+		TypeName:    type_name,
 	}, nil
 }
 
-// Create TypeName from colon-seperated spec in current (file) scope:
+// Create TypeName from colon-seperated spec:
 //   [full_pkg_path:]type
 // Example:
 //   "[]byte"
@@ -213,7 +221,7 @@ func (tctx *TypeContext) UseMySQLNullTime() error {
 	return nil
 }
 
-// Main method of TypeContext. Find a type suitable to store a db field data in current (file) scope.
+// Main method of TypeContext. Find a type suitable to store a db field data.
 func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 	// see: github.com/pingcap/tidb/mysql/type.go and github.com/pingcap/tidb/util/types/field_type.go
 	cls := ft.ToClass()

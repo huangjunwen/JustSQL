@@ -25,11 +25,10 @@ func testCreateTypeNameFromSpec(t *testing.T, tctx *TypeContext, type_string str
 func TestTypeContext(t *testing.T) {
 	fmt.Println("TestParsing")
 	tctx := NewTypeContext()
-	tctx.SwitchScope("")
 	testCreateTypeNameFromSpec(t, tctx, "[]int", "[]int", false)
 	testCreateTypeNameFromSpec(t, tctx, "sql:NullString", "sql.NullString", false)
 	testCreateTypeNameFromSpec(t, tctx, "github.com/go-sql-driver/mysql:NullTime", "mysql.NullTime", false)
 	testCreateTypeNameFromSpec(t, tctx, "github.com/pingcap/tidb/mysql:SQLError", "mysql_1.SQLError", false)
-	testCreateTypeNameFromSpec(t, tctx, "github.com/pingcap/tidb/mysql.invalid:SQLError", "", true)
+	testCreateTypeNameFromSpec(t, tctx, "github.com/pingcap/tidb/mysql.dot:SQLError", "mysql_2.SQLError", false)
 
 }
