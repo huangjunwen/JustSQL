@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var ident_re *regexp.Regexp = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+var ident_re *regexp.Regexp = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
 // Is it a valid identifier?
 func IsIdent(s string) bool {
@@ -28,6 +28,10 @@ func CamelCase(s string) string {
 type Str struct {
 	O         string
 	CamelCase string
+}
+
+func (s Str) String() string {
+	return s.CamelCase
 }
 
 func NewStr(s string) Str {
