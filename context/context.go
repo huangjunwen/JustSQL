@@ -1,9 +1,10 @@
 package context
 
-// Runtime information.
+// Runtime context.
 type Context struct {
-	DB *EmbedDB
-	TypeContext
+	DB                *EmbedDB
+	DefaultSchemaName string
+	*TypeContext
 }
 
 func NewContext(db_store_path string) (*Context, error) {
@@ -14,5 +15,5 @@ func NewContext(db_store_path string) (*Context, error) {
 	return &Context{
 		DB:          db,
 		TypeContext: NewTypeContext(),
-	}
+	}, nil
 }

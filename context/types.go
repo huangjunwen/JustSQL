@@ -11,73 +11,138 @@ import (
 
 // TypeName represents a Go type in literal.
 type TypeName struct {
-	// Full import path, empty if it's builtin or in current module
+	// In which scope (file) this type is used.
+	Scope string
+	// Full import path, empty if it's builtin or in current package.
 	PkgPath string
 	// Name for the package and type.
 	PkgName  string
 	TypeName string
 }
 
-// Return "PkgName.TypeName"
-func (n *TypeName) String() string {
-	if n.PkgName == "" {
-		return n.TypeName
-	}
-	return fmt.Sprintf("%s.%s", n.PkgName, n.TypeName)
+// Type associated information for a (file) scope.
+type typeScope struct {
+	// Scope name.
+	scopeName string
+
+	// Pkg path -> pkg name (can be '_')
+	pkgPaths map[string]string
+
+	// Pkg name -> pkg path. NOTE: len(pkgNames) <= len(pkgPaths) since maybe
+	// some packages are imported only.
+	pkgNames map[string]string
 }
 
 // Type associated information.
 type TypeContext struct {
-	// Map pkg path <-> pkg name
-	pkgPath2Name map[string]string
-	name2PkgPath map[string]string
-
 	// ts.TypeToStr(*ts.FieldType.Tp) -> TypeName
-	overrideAdaptTypes map[string]*TypeName
+	overridedAdaptTypes map[string]*TypeName
+
+	currScope *typeScope
+	scopes    map[string]*typeScope
+}
+
+// Return "PkgName.TypeName"
+func (tn *TypeName) String() string {
+	if tn.PkgName == "" {
+		return tn.TypeName
+	}
+	return fmt.Sprintf("%s.%s", tn.PkgName, tn.TypeName)
 }
 
 func NewTypeContext() *TypeContext {
 	return &TypeContext{
-		pkgPath2Name:       make(map[string]string),
-		name2PkgPath:       make(map[string]string),
-		overrideAdaptTypes: make(map[string]*TypeName),
+		overridedAdaptTypes: make(map[string]*TypeName),
+		currScope:           nil,
+		scopes:              make(map[string]*typeScope),
 	}
 }
 
-// Add and get a unique package name from its path.
-func (tctx *TypeContext) AddPkg(pkg_path string) (string, error) {
+func (tctx *TypeContext) checkScope() *typeScope {
+	if tctx.currScope == nil {
+		panic(fmt.Errorf("currScope == nil. Please EnterScope first."))
+	}
+	return tctx.currScope
+}
+
+// Enter a (file) scope.
+func (tctx *TypeContext) EnterScope(scope_name string) {
+	tctx.LeaveScope()
+
+	if scope, ok := tctx.scopes[scope_name]; ok {
+		tctx.currScope = scope
+		return
+	}
+
+	curr := &typeScope{
+		scopeName: scope_name,
+		pkgPaths:  make(map[string]string),
+		pkgNames:  make(map[string]string),
+	}
+	tctx.scopes[scope_name] = curr
+	tctx.currScope = curr
+}
+
+// Leave current (file) scope.
+func (tctx *TypeContext) LeaveScope() {
+	tctx.currScope = nil
+}
+
+// Add pakcage to current (file) scope and return a unique package
+// name. If the package is import only (not used), then return '_'.
+func (tctx *TypeContext) AddPkg(pkg_path string, import_only bool) (string, error) {
+	scope := tctx.checkScope()
+
 	// Check exists.
-	if name, ok := tctx.pkgPath2Name[pkg_path]; ok {
+	if name, ok := scope.pkgPaths[pkg_path]; ok {
 		return name, nil
 	}
-	// Special case for builtin.
+
+	// For builtin or current package.
 	if pkg_path == "" {
-		tctx.pkgPath2Name[""] = ""
-		tctx.name2PkgPath[""] = ""
 		return "", nil
 	}
+
+	// If import_only == true, only add to pkgPaths
+	if import_only {
+		scope.pkgPaths[pkg_path] = "_"
+		return "_", nil
+	}
+
 	// Try to use the base component as package name.
 	base := path.Base(pkg_path)
 	if !utils.IsIdent(base) {
 		return "", fmt.Errorf("Bad package path: %q", pkg_path)
 	}
-	if _, ok := tctx.name2PkgPath[base]; !ok {
-		tctx.pkgPath2Name[pkg_path] = base
-		tctx.name2PkgPath[base] = pkg_path
-		return base, nil
-	}
-	// Name conflict. Add a number suffix to resolve it.
-	for i := 1; ; i += 1 {
-		n := fmt.Sprintf("%s_%d", base, i)
-		if _, ok := tctx.name2PkgPath[n]; !ok {
-			tctx.pkgPath2Name[pkg_path] = n
-			tctx.name2PkgPath[n] = pkg_path
-			return n, nil
+
+	name := base
+	i := 0
+	for {
+		if _, ok := scope.pkgNames[name]; !ok {
+			scope.pkgPaths[pkg_path] = name
+			scope.pkgNames[name] = pkg_path
+			return name, nil
 		}
+		// Name conflict. Add a number suffix.
+		i += 1
+		name = fmt.Sprintf("%s_%d", base, i)
 	}
 }
 
-// Create TypeName from its package path and type name.
+// List all packages in current scope. Returns a list of [pkg_path, pkg_name].
+func (tctx *TypeContext) ListPkg() [][]string {
+	scope := tctx.checkScope()
+	ret := make([][]string, 0, len(scope.pkgPaths))
+	for pkg_path, pkg_name := range scope.pkgPaths {
+		ret = append(ret, []string{
+			pkg_path,
+			pkg_name,
+		})
+	}
+	return ret
+}
+
+// Create TypeName from its package path and type name in current scope.
 // Example:
 //   tctx.CreateTypeName("sql", "NullString")
 func (tctx *TypeContext) CreateTypeName(pkg_path, type_name string) (*TypeName, error) {
@@ -85,19 +150,20 @@ func (tctx *TypeContext) CreateTypeName(pkg_path, type_name string) (*TypeName, 
 		return nil, fmt.Errorf("Missing type name")
 	}
 
-	pkg_name, err := tctx.AddPkg(pkg_path)
+	pkg_name, err := tctx.AddPkg(pkg_path, false)
 	if err != nil {
 		return nil, err
 	}
 
 	return &TypeName{
+		Scope:    tctx.currScope.scopeName,
 		PkgPath:  pkg_path,
 		PkgName:  pkg_name,
 		TypeName: type_name,
 	}, nil
 }
 
-// Create TypeName from colon-seperated spec:
+// Create TypeName from colon-seperated spec in current scope:
 //   [full_pkg_path:]type
 // Example:
 //   "[]byte"
@@ -127,7 +193,7 @@ func (tctx *TypeContext) CreateTypeNameFromSpec(s string) (*TypeName, error) {
 //   tctx.OverrideAdaptType("date", tn)
 //   tctx.OverrideAdaptType("timestamp", tn)
 func (tctx *TypeContext) OverrideAdaptType(tp_str string, tn *TypeName) error {
-	tctx.overrideAdaptTypes[strings.ToLower(tp_str)] = tn
+	tctx.overridedAdaptTypes[strings.ToLower(tp_str)] = tn
 	return nil
 }
 
@@ -144,7 +210,7 @@ func (tctx *TypeContext) UseMySQLNullTime() error {
 	return nil
 }
 
-// Main method of TypeContext. Find a type suitable to store database field type.
+// Main method of TypeContext. Find a type suitable to store a db field data in current scope.
 func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 	// see: github.com/pingcap/tidb/mysql/type.go and github.com/pingcap/tidb/util/types/field_type.go
 	cls := ft.ToClass()
@@ -155,7 +221,7 @@ func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 	unsigned := mysql.HasUnsignedFlag(flag)
 	binary := mysql.HasBinaryFlag(flag)
 
-	if tn, ok := tctx.overrideAdaptTypes[strings.ToLower(ts.TypeToStr(ft.Tp, ft.Charset))]; ok {
+	if tn, ok := tctx.overridedAdaptTypes[strings.ToLower(ts.TypeToStr(ft.Tp, ft.Charset))]; ok {
 		return tn, nil
 	}
 
