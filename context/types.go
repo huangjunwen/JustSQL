@@ -51,11 +51,12 @@ func (tn *TypeName) String() string {
 }
 
 func NewTypeContext() *TypeContext {
-	return &TypeContext{
+	ret := &TypeContext{
 		overridedAdaptTypes: make(map[string]*TypeName),
 		currScope:           nil,
 		scopes:              make(map[string]*typeScope),
 	}
+	return ret
 }
 
 func (tctx *TypeContext) checkScope() *typeScope {
@@ -65,10 +66,17 @@ func (tctx *TypeContext) checkScope() *typeScope {
 	return tctx.currScope
 }
 
-// Enter a (file) scope.
-func (tctx *TypeContext) EnterScope(scope_name string) {
-	tctx.LeaveScope()
+// Return all (file) scope names.
+func (tctx *TypeContext) ListScope() []string {
+	ret := make([]string, 0, len(tctx.scopes))
+	for name, _ := range tctx.scopes {
+		ret = append(ret, name)
+	}
+	return ret
+}
 
+// Switch to a (file) scope.
+func (tctx *TypeContext) SwitchScope(scope_name string) {
 	if scope, ok := tctx.scopes[scope_name]; ok {
 		tctx.currScope = scope
 		return
@@ -83,13 +91,8 @@ func (tctx *TypeContext) EnterScope(scope_name string) {
 	tctx.currScope = curr
 }
 
-// Leave current (file) scope.
-func (tctx *TypeContext) LeaveScope() {
-	tctx.currScope = nil
-}
-
 // Add pakcage to current (file) scope and return a unique package
-// name. If the package is import only (not used), then return '_'.
+// name. If the package is imported only (not used), then return '_'.
 func (tctx *TypeContext) AddPkg(pkg_path string, import_only bool) (string, error) {
 	scope := tctx.checkScope()
 
@@ -129,7 +132,7 @@ func (tctx *TypeContext) AddPkg(pkg_path string, import_only bool) (string, erro
 	}
 }
 
-// List all packages in current scope. Returns a list of [pkg_path, pkg_name].
+// List all packages in current (file) scope. Returns a list of [pkg_path, pkg_name].
 func (tctx *TypeContext) ListPkg() [][]string {
 	scope := tctx.checkScope()
 	ret := make([][]string, 0, len(scope.pkgPaths))
@@ -142,7 +145,7 @@ func (tctx *TypeContext) ListPkg() [][]string {
 	return ret
 }
 
-// Create TypeName from its package path and type name in current scope.
+// Create TypeName from its package path and type name in current (file) scope.
 // Example:
 //   tctx.CreateTypeName("sql", "NullString")
 func (tctx *TypeContext) CreateTypeName(pkg_path, type_name string) (*TypeName, error) {
@@ -163,7 +166,7 @@ func (tctx *TypeContext) CreateTypeName(pkg_path, type_name string) (*TypeName, 
 	}, nil
 }
 
-// Create TypeName from colon-seperated spec in current scope:
+// Create TypeName from colon-seperated spec in current (file) scope:
 //   [full_pkg_path:]type
 // Example:
 //   "[]byte"
@@ -210,7 +213,7 @@ func (tctx *TypeContext) UseMySQLNullTime() error {
 	return nil
 }
 
-// Main method of TypeContext. Find a type suitable to store a db field data in current scope.
+// Main method of TypeContext. Find a type suitable to store a db field data in current (file) scope.
 func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 	// see: github.com/pingcap/tidb/mysql/type.go and github.com/pingcap/tidb/util/types/field_type.go
 	cls := ft.ToClass()

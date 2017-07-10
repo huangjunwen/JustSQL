@@ -25,7 +25,7 @@ func testCreateTypeNameFromSpec(t *testing.T, tctx *TypeContext, type_string str
 func TestTypeContext(t *testing.T) {
 	fmt.Println("TestParsing")
 	tctx := NewTypeContext()
-	tctx.EnterScope("")
+	tctx.SwitchScope("")
 	testCreateTypeNameFromSpec(t, tctx, "[]int", "[]int", false)
 	testCreateTypeNameFromSpec(t, tctx, "sql:NullString", "sql.NullString", false)
 	testCreateTypeNameFromSpec(t, tctx, "github.com/go-sql-driver/mysql:NullTime", "mysql.NullTime", false)
