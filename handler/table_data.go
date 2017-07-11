@@ -6,7 +6,7 @@ import (
 )
 
 // The 'dot' object for renderring TableData
-type TableDot struct {
+type TableDataDot struct {
 	DB    *context.DBData
 	Table *context.TableData
 }
@@ -22,7 +22,7 @@ func handleTableData(ctx *context.Context, obj interface{}) (interface{}, error)
 		return nil, err
 	}
 
-	return &TableDot{
+	return &TableDataDot{
 		DB:    db,
 		Table: table,
 	}, nil
