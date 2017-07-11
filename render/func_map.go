@@ -5,7 +5,7 @@ import (
 	"text/template"
 )
 
-func buildFuncMap(ctx *context.Context) template.FuncMap {
+func buildExtraFuncs(ctx *context.Context) template.FuncMap {
 
 	tctx := ctx.TypeContext
 

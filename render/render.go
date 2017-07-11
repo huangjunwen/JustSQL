@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	default_type_templates map[reflect.Type]*template.Template = make(map[reflect.Type]*template.Template)
+	default_type_templates map[reflect.Type]string = make(map[reflect.Type]string)
 )
 
 // Regist default template for a type.
@@ -20,12 +20,7 @@ func RegistDefaultTypeTemplate(obj interface{}, text string) {
 		panic(fmt.Errorf("RegistTypeTemplate: %T has already registed", obj))
 	}
 
-	tmpl, err := template.New("default").Parse(text)
-	if err != nil {
-		panic(err)
-	}
-
-	default_type_templates[t] = tmpl
+	default_type_templates[t] = text
 }
 
 // RenderInfo contains templates to render objects.
@@ -34,6 +29,9 @@ type RenderInfo struct {
 	// tmpls[0] is the default template
 	// tmpls[-1] is the template used for renderring
 	tmpls map[reflect.Type][]*template.Template
+
+	// Extra functions used in templates.
+	extraFuncs template.FuncMap
 }
 
 func (r *RenderInfo) defaultTmpl(obj interface{}) *template.Template {
@@ -52,17 +50,18 @@ func (r *RenderInfo) currentTmpl(obj interface{}) *template.Template {
 	return tmpls[len(tmpls)-1]
 }
 
-func NewRenderInfo() *RenderInfo {
+func NewRenderInfo(ctx *context.Context) *RenderInfo {
 	ret := &RenderInfo{
-		tmpls: make(map[reflect.Type][]*template.Template),
+		tmpls:      make(map[reflect.Type][]*template.Template),
+		extraFuncs: buildExtraFuncs(ctx),
 	}
-	for t, tmpl := range default_type_templates {
-		tmpl_clone, err := tmpl.Clone()
-		if err != nil {
+	for t, text := range default_type_templates {
+		tmpl := template.New("default").Funcs(ret.extraFuncs)
+		if _, err := tmpl.Parse(text); err != nil {
 			panic(err)
 		}
 		ret.tmpls[t] = []*template.Template{
-			tmpl_clone,
+			tmpl,
 		}
 	}
 	return ret
@@ -76,7 +75,7 @@ func (r *RenderInfo) AddTemplate(obj interface{}, name string, text string) erro
 		return fmt.Errorf("AddTemplate: no render info for %T", obj)
 	}
 
-	tmpl := default_tmpl.New(name)
+	tmpl := default_tmpl.New(name).Funcs(r.extraFuncs)
 	if _, err := tmpl.Parse(text); err != nil {
 		return err
 	}
@@ -84,17 +83,6 @@ func (r *RenderInfo) AddTemplate(obj interface{}, name string, text string) erro
 	t := reflect.TypeOf(obj)
 	r.tmpls[t] = append(r.tmpls[t], tmpl)
 	return nil
-}
-
-// Add extra functions to all defined templates. NOTE: This method
-// should be called after all templates are added.
-func (r *RenderInfo) AddExtraFuncs(ctx *context.Context) {
-	funcMap := buildFuncMap(ctx)
-	for _, tmpls := range r.tmpls {
-		for _, tmpl := range tmpls {
-			tmpl.Funcs(funcMap)
-		}
-	}
 }
 
 // Render.
