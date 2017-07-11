@@ -24,7 +24,8 @@ func (r *Renderer) Run(dot interface{}, w io.Writer) error {
 }
 
 func (r *Renderer) AddTemplate(tmpl_name, tmpl_text string) error {
-	if tmpl, err := r.defaultTmpl.New(tmpl_name); err != nil {
+	tmpl := r.defaultTmpl.New(tmpl_name)
+	if _, err := tmpl.Parse(tmpl_text); err != nil {
 		return err
 	} else {
 		if tmpl_name == "" {
