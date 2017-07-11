@@ -5,12 +5,6 @@ import (
 	"github.com/huangjunwen/JustSQL/context"
 )
 
-// The 'dot' object for renderring TableData
-type TableDataDot struct {
-	DB    *context.DBData
-	Table *context.TableData
-}
-
 func handleTableData(ctx *context.Context, obj interface{}) (interface{}, error) {
 	table, ok := obj.(*context.TableData)
 	if !ok {
@@ -22,9 +16,10 @@ func handleTableData(ctx *context.Context, obj interface{}) (interface{}, error)
 		return nil, err
 	}
 
-	return &TableDataDot{
-		DB:    db,
-		Table: table,
+	// The 'dot' object to render TableData
+	return map[string]interface{}{
+		"DB":    db,
+		"Table": table,
 	}, nil
 }
 
