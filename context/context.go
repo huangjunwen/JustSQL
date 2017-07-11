@@ -28,7 +28,7 @@ func NewContext(db_store_path, default_db string) (*Context, error) {
 	if default_db == "" {
 		default_db = DEFAULT_DB
 	}
-	db.MustExecute(fmt.Sprintf("DROP DATABASE %s", default_db))
+	db.MustExecute(fmt.Sprintf("DROP DATABASE IF EXISTS %s", default_db))
 	db.MustExecute(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", default_db))
 	db.MustExecute(fmt.Sprintf("USE %s", default_db))
 
