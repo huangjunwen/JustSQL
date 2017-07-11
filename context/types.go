@@ -242,14 +242,14 @@ func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 		case mysql.TypeBit: // bit
 			if flen == 1 {
 				if nullable {
-					return tctx.CreateTypeName("sql", "NullBool")
+					return tctx.CreateTypeName("database/sql", "NullBool")
 				} else {
 					return tctx.CreateTypeName("", "bool")
 				}
 			}
 
 			if nullable {
-				return tctx.CreateTypeName("sql", "NullInt64")
+				return tctx.CreateTypeName("database/sql", "NullInt64")
 			}
 
 			if flen <= 8 {
@@ -266,14 +266,14 @@ func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 			// tinyint(1) also means bool
 			if flen == 1 {
 				if nullable {
-					return tctx.CreateTypeName("sql", "NullBool")
+					return tctx.CreateTypeName("database/sql", "NullBool")
 				} else {
 					return tctx.CreateTypeName("", "bool")
 				}
 			}
 
 			if nullable {
-				return tctx.CreateTypeName("sql", "NullInt64")
+				return tctx.CreateTypeName("database/sql", "NullInt64")
 			}
 
 			if unsigned {
@@ -284,7 +284,7 @@ func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 
 		case mysql.TypeShort: // smallint
 			if nullable {
-				return tctx.CreateTypeName("sql", "NullInt64")
+				return tctx.CreateTypeName("database/sql", "NullInt64")
 			}
 
 			if unsigned {
@@ -298,7 +298,7 @@ func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 
 		case mysql.TypeLong: // int
 			if nullable {
-				return tctx.CreateTypeName("sql", "NullInt64")
+				return tctx.CreateTypeName("database/sql", "NullInt64")
 			}
 
 			if unsigned {
@@ -309,7 +309,7 @@ func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 
 		case mysql.TypeLonglong: // bigint
 			if nullable {
-				return tctx.CreateTypeName("sql", "NullInt64")
+				return tctx.CreateTypeName("database/sql", "NullInt64")
 			}
 
 			if unsigned {
@@ -325,7 +325,7 @@ func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 
 	case ts.ClassReal:
 		if nullable {
-			return tctx.CreateTypeName("sql", "NullFloat64")
+			return tctx.CreateTypeName("database/sql", "NullFloat64")
 		}
 		switch tp {
 		case mysql.TypeFloat: // float
@@ -337,7 +337,7 @@ func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 	// NOTE: it is STRONGLY recommended to use precise type to store decimal.
 	case ts.ClassDecimal:
 		if nullable {
-			return tctx.CreateTypeName("sql", "NullFloat64")
+			return tctx.CreateTypeName("database/sql", "NullFloat64")
 		}
 		return tctx.CreateTypeName("", "float64")
 
@@ -346,7 +346,7 @@ func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 			return tctx.CreateTypeName("", "[]byte")
 		}
 		if nullable {
-			return tctx.CreateTypeName("sql", "NullString")
+			return tctx.CreateTypeName("database/sql", "NullString")
 		}
 		return tctx.CreateTypeName("", "string")
 
