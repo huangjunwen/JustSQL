@@ -9,72 +9,104 @@ import (
 	"text/template"
 )
 
-// Renderer contains templates to render object.
-type Renderer struct {
-	defaultTmpl *template.Template
-	tmpl        *template.Template
-}
-
-func (r *Renderer) Run(dot interface{}, w io.Writer) error {
-	tmpl := r.tmpl
-	if tmpl == nil {
-		tmpl = r.defaultTmpl
-	}
-	return tmpl.Execute(w, dot)
-}
-
-func (r *Renderer) AddTemplate(tmpl_name, tmpl_text string) error {
-	tmpl := r.defaultTmpl.New(tmpl_name)
-	if _, err := tmpl.Parse(tmpl_text); err != nil {
-		return err
-	} else {
-		if tmpl_name == "" {
-			r.tmpl = tmpl
-		}
-		return nil
-	}
-}
-
-// Map type -> Renderer
 var (
-	renderers map[reflect.Type]*Renderer = make(map[reflect.Type]*Renderer)
+	default_type_templates map[reflect.Type]*template.Template = make(map[reflect.Type]*template.Template)
 )
 
-func RegistRenderer(obj interface{}, tmpl_text string) {
+// Regist default template for a type.
+func RegistDefaultTypeTemplate(obj interface{}, text string) {
 	t := reflect.TypeOf(obj)
-	if _, ok := renderers[t]; ok {
-		panic(fmt.Errorf("RegistRenderer: %T has already registed", obj))
+	if _, ok := default_type_templates[t]; ok {
+		panic(fmt.Errorf("RegistTypeTemplate: %T has already registed", obj))
 	}
 
-	default_tmpl, err := template.New("default").Parse(tmpl_text)
+	tmpl, err := template.New("default").Parse(text)
 	if err != nil {
 		panic(err)
 	}
 
-	renderers[t] = &Renderer{
-		defaultTmpl: default_tmpl,
-	}
-
+	default_type_templates[t] = tmpl
 }
 
-func GetRenderer(obj interface{}) *Renderer {
-	renderer, ok := renderers[reflect.TypeOf(obj)]
-	if ok {
-		return renderer
+// RenderInfo contains templates to render objects.
+type RenderInfo struct {
+	// map type -> []*template.Template
+	// tmpls[0] is the default template
+	// tmpls[-1] is the template used for renderring
+	tmpls map[reflect.Type][]*template.Template
+}
+
+func (r *RenderInfo) defaultTmpl(obj interface{}) *template.Template {
+	tmpls, ok := r.tmpls[reflect.TypeOf(obj)]
+	if !ok {
+		return nil
 	}
+	return tmpls[0]
+}
+
+func (r *RenderInfo) currentTmpl(obj interface{}) *template.Template {
+	tmpls, ok := r.tmpls[reflect.TypeOf(obj)]
+	if !ok {
+		return nil
+	}
+	return tmpls[len(tmpls)-1]
+}
+
+func NewRenderInfo() *RenderInfo {
+	ret := &RenderInfo{
+		tmpls: make(map[reflect.Type][]*template.Template),
+	}
+	for t, tmpl := range default_type_templates {
+		tmpl_clone, err := tmpl.Clone()
+		if err != nil {
+			panic(err)
+		}
+		ret.tmpls[t] = []*template.Template{
+			tmpl_clone,
+		}
+	}
+	return ret
+}
+
+// Add a new template to the RenderInfo. The lastest added
+// template will be used for renderring.
+func (r *RenderInfo) AddTemplate(obj interface{}, name string, text string) error {
+	default_tmpl := r.defaultTmpl(obj)
+	if default_tmpl == nil {
+		return fmt.Errorf("AddTemplate: no render info for %T", obj)
+	}
+
+	tmpl := default_tmpl.New(name)
+	if _, err := tmpl.Parse(text); err != nil {
+		return err
+	}
+
+	t := reflect.TypeOf(obj)
+	r.tmpls[t] = append(r.tmpls[t], tmpl)
 	return nil
 }
 
-// Main method to render an obj.
-func Render(ctx *context.Context, obj interface{}, w io.Writer) error {
+// Add extra functions to all defined templates. NOTE: This method
+// should be called after all templates are added.
+func (r *RenderInfo) AddExtraFuncs(ctx *context.Context) {
+	funcMap := buildFuncMap(ctx)
+	for _, tmpls := range r.tmpls {
+		for _, tmpl := range tmpls {
+			tmpl.Funcs(funcMap)
+		}
+	}
+}
+
+// Render.
+func (r *RenderInfo) Run(ctx *context.Context, obj interface{}, w io.Writer) error {
+	tmpl := r.currentTmpl(obj)
+	if tmpl == nil {
+		return fmt.Errorf("Render: don't know how to render %T", obj)
+	}
+
 	h := handler.GetHandler(obj)
 	if h == nil {
 		return fmt.Errorf("Render: GetHandler return nil for %T", obj)
-	}
-
-	r := GetRenderer(obj)
-	if r == nil {
-		return fmt.Errorf("Render: GetRenderer return nil for %T", obj)
 	}
 
 	dot, err := h(ctx, obj)
@@ -82,5 +114,5 @@ func Render(ctx *context.Context, obj interface{}, w io.Writer) error {
 		return err
 	}
 
-	return r.Run(dot, w)
+	return tmpl.Execute(w, dot)
 }

@@ -11,11 +11,16 @@ const (
 
 // Runtime context.
 type Context struct {
-	DB        *EmbedDB
+	// The embeded db.
+	DB *EmbedDB
+
+	// Default db name.
 	DefaultDB string
+
+	// Type things.
 	*TypeContext
 
-	// Cached.
+	// Extracted meta data.
 	dbData *DBData
 }
 
