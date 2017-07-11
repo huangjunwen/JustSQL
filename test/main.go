@@ -1,0 +1,126 @@
+package main
+
+import (
+	"bytes"
+	"flag"
+	"github.com/huangjunwen/JustSQL/context"
+	"github.com/huangjunwen/JustSQL/render"
+	"github.com/pingcap/tidb/ast"
+	"go/format"
+	"io"
+	"io/ioutil"
+	"log"
+	"os"
+	"path/filepath"
+)
+
+var (
+	ddl_dir = flag.String("ddl", "", "Directory containing DDL SQL files (.sql) to pre-load")
+)
+
+func checkDir(path string) bool {
+	fi, err := os.Stat(path)
+	if err == nil {
+		return fi.IsDir()
+	}
+	return false
+}
+
+func loadDDL(ctx *context.Context) {
+	db := ctx.DB
+	// No ddl dir.
+	if *ddl_dir == "" {
+		return
+	}
+
+	ddl_files, err := filepath.Glob(*ddl_dir + "/*.sql")
+	if err != nil {
+		log.Fatalf("filepath.Glob(%q): %s", *ddl_dir+"/*.sql", err)
+	}
+
+	// For each SQL file.
+	for _, ddl_file := range ddl_files {
+		content, err := ioutil.ReadFile(ddl_file)
+		if err != nil {
+			log.Fatalf("ioutil.ReadFile(%q): %s", ddl_file, err)
+		}
+		ddl := string(content)
+
+		// Parse file content.
+		stmts, err := db.Parse(ddl)
+		if err != nil {
+			log.Fatalf("db.Parse(<file: %q>): %s", ddl_file, err)
+		}
+
+		// Check DDL statments.
+		for _, stmt := range stmts {
+			if _, ok := stmt.(ast.DDLNode); ok {
+				continue
+			}
+			if _, ok := stmt.(*ast.SetStmt); ok {
+				continue
+			}
+			log.Fatalf("<file: %q>: %q is not a DDL statement (%T)", ddl_file, stmt.Text(), stmt)
+		}
+
+		// Execute it.
+		if _, err := db.Execute(ddl); err != nil {
+			log.Fatalf("db.Execute(<file: %q>): %s", ddl_file, err)
+		}
+	}
+}
+
+func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+
+	// Parse cmd args.
+	flag.Parse()
+
+	var out bytes.Buffer
+
+	if *ddl_dir != "" {
+		if !checkDir(*ddl_dir) {
+			log.Fatalf("-ddl: %q do not exist or it's not a directory", *ddl_dir)
+		}
+	}
+
+	ctx, err := context.NewContext("", "")
+	if err != nil {
+		log.Fatalf("NewContext: %s", err)
+	}
+	ctx.TypeContext.UseMySQLNullTime()
+
+	// Load DDL.
+	log.Printf("Start to load DDL\n")
+	loadDDL(ctx)
+	log.Printf("DDL loaded\n")
+
+	dbdata, err := ctx.DBData()
+	if err != nil {
+		log.Fatalf("ctx.DBData: %s", err)
+	}
+
+	// XXX: Test name conflict
+	ctx.CurrScope().UsePkg("hello/fmt")
+
+	ri := render.NewRenderInfo(ctx)
+
+	for _, table_data := range dbdata.Tables {
+		err := ri.Run(ctx, table_data, &out)
+		if err != nil {
+			log.Fatalf("render.Render: %s", err)
+		}
+	}
+
+	if true {
+		formatted, err := format.Source(out.Bytes())
+		if err != nil {
+			log.Fatalf("format.Source: %s", err)
+		}
+
+		io.Copy(os.Stdout, bytes.NewBuffer(formatted))
+	} else {
+		io.Copy(os.Stdout, &out)
+	}
+
+}

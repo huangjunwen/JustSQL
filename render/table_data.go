@@ -7,7 +7,9 @@ import (
 func init() {
 	t := `
 {{/* imports */}}
+{{- $ctx := imp "context" -}}
 {{- $fmt := imp "fmt" -}}
+{{- $sql := imp "database/sql" -}}
 
 {{/* enum and set types */}}
 {{ range $i, $column := .Table.Columns }}
@@ -87,8 +89,10 @@ func (e {{ $enum_name }}) Value() (driver.Value, error) {
 {{ end }}
 
 {{/* main struct */}}
-// Table {{ .Table.Name.O }}
-type {{ .Table.Name }} struct {
+{{- $table_name := .Table.Name.O -}}
+{{- $struct_name := .Table.Name -}}
+// Table {{ $table_name }}
+type {{ $struct_name }} struct {
 {{ range $i, $column := .Table.Columns }}
 	{{- if $column.IsEnum }}
 	{{ $column.Name }} {{ $.Table.Name }}{{ $column.Name }} // {{ $column.Name.O }}
@@ -98,6 +102,9 @@ type {{ .Table.Name }} struct {
 	{{ $column.Name }} {{ $column.Type }} // {{ $column.Name.O }}
 	{{- end -}}
 {{ end }}
+}
+
+func (entry *{{ $struct_name }}) Insert(ctx {{ $ctx }}.Context, db *{{ $sql }}.DB) error {
 }
 
 `
