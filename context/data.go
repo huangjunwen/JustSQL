@@ -112,6 +112,13 @@ type ColumnData struct {
 
 	// Element list if IsEnum == true or IsSet == true
 	Elems []string
+
+	// Flags of this column
+	IsNotNULL       bool
+	IsAutoIncrement bool
+	IsOnUpdateNow   bool
+
+	DefaultValue interface{}
 }
 
 func NewColumnData(ctx *Context, columninfo *model.ColumnInfo) (*ColumnData, error) {
@@ -121,7 +128,9 @@ func NewColumnData(ctx *Context, columninfo *model.ColumnInfo) (*ColumnData, err
 		Offset:     columninfo.Offset,
 	}
 
-	tp, err := ctx.TypeContext.AdaptType(&columninfo.FieldType)
+	ft := &columninfo.FieldType
+
+	tp, err := ctx.TypeContext.AdaptType(ft)
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +143,12 @@ func NewColumnData(ctx *Context, columninfo *model.ColumnInfo) (*ColumnData, err
 		ret.IsSet = true
 		ret.Elems = columninfo.FieldType.Elems
 	}
+
+	ret.IsNotNULL = mysql.HasNotNullFlag(ft.Flag)
+	ret.IsAutoIncrement = mysql.HasAutoIncrementFlag(ft.Flag)
+	ret.IsOnUpdateNow = mysql.HasOnUpdateNowFlag(ft.Flag)
+
+	ret.DefaultValue = columninfo.DefaultValue
 
 	return ret, nil
 }
