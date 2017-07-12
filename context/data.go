@@ -1,6 +1,7 @@
 package context
 
 import (
+	"fmt"
 	"github.com/huangjunwen/JustSQL/utils"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
@@ -41,7 +42,10 @@ type TableData struct {
 	Columns     []*ColumnData
 	Indices     []*IndexData
 	ForeignKeys []*FKData
-	Primary     *IndexData
+
+	// Shortcut
+	Primary             *IndexData
+	AutoIncrementColumn *ColumnData
 
 	// column name -> column index
 	columnIndex map[string]int
@@ -64,6 +68,13 @@ func NewTableData(ctx *Context, tableinfo *model.TableInfo) (*TableData, error) 
 		}
 		ret.Columns = append(ret.Columns, columndata)
 		ret.columnIndex[columndata.Name.O] = i
+
+		if columndata.IsAutoIncrement {
+			if ret.AutoIncrementColumn != nil {
+				panic(fmt.Errorf("Multiple auto increment columns found in table %q", ret.Name.O))
+			}
+			ret.AutoIncrementColumn = columndata
+		}
 	}
 
 	for _, indexinfo := range tableinfo.Indices {
