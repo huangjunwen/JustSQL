@@ -128,8 +128,7 @@ func (scope *TypeScope) ListPkg() [][]string {
 
 // Type associated information.
 type TypeContext struct {
-	// ts.TypeToStr(*ts.FieldType.Tp) -> TypeName
-	overridedAdaptTypes map[string]*TypeName
+	customTypeAdapter []func(*TypeContext, *ts.FieldType) *TypeName
 
 	currScope *TypeScope
 	scopes    map[string]*TypeScope
@@ -137,9 +136,9 @@ type TypeContext struct {
 
 func NewTypeContext() *TypeContext {
 	ret := &TypeContext{
-		overridedAdaptTypes: make(map[string]*TypeName),
-		currScope:           nil,
-		scopes:              make(map[string]*TypeScope),
+		customTypeAdapter: make([]func(*TypeContext, *ts.FieldType) *TypeName, 0),
+		currScope:         nil,
+		scopes:            make(map[string]*TypeScope),
 	}
 	// Switch to default scope.
 	ret.SwitchScope("")
@@ -167,6 +166,7 @@ func (tctx *TypeContext) SwitchScope(scope_name string) {
 // Example:
 //   tctx.CreateTypeName("sql", "NullString")
 func (tctx *TypeContext) CreateTypeName(pkg_path, type_name string) (*TypeName, error) {
+	// TODO: Add more checks on pkg_path
 	return &TypeName{
 		typeContext: tctx,
 		PkgPath:     pkg_path,
@@ -194,35 +194,49 @@ func (tctx *TypeContext) CreateTypeNameFromSpec(s string) (*TypeName, error) {
 	return tctx.CreateTypeName(pkg_path, type_name)
 }
 
-// Override the adapt type for specific database field type.
-// Example:
-//   tn, err := tctx.CreateTypeName("github.com/go-sql-driver/mysql", "NullTime")
-//   if err != nil {
-//     ...
-//   }
-//   tctx.OverrideAdaptType("datetime", tn)
-//   tctx.OverrideAdaptType("date", tn)
-//   tctx.OverrideAdaptType("timestamp", tn)
-func (tctx *TypeContext) OverrideAdaptType(tp_str string, tn *TypeName) error {
-	tctx.overridedAdaptTypes[strings.ToLower(tp_str)] = tn
-	return nil
+// Add a custom type adapter.
+func (tctx *TypeContext) AddCustomTypeAdapter(f func(*TypeContext, *ts.FieldType) *TypeName) {
+	tctx.customTypeAdapter = append(tctx.customTypeAdapter, f)
 }
 
-// Use 'mysql.NullTime' for datetime/date/timestamp field type (generated code
-// depends on "github.com/go-sql-driver/mysql")
-func (tctx *TypeContext) UseMySQLNullTime() error {
-	tn, err := tctx.CreateTypeName("github.com/go-sql-driver/mysql", "NullTime")
-	if err != nil {
-		return err
+func mysqlNullTimeAdapter(tctx *TypeContext, ft *ts.FieldType) *TypeName {
+	tp := ft.Tp
+	flag := ft.Flag
+	nullable := !mysql.HasNotNullFlag(flag)
+	switch tp {
+	case mysql.TypeDatetime, mysql.TypeDate, mysql.TypeTimestamp:
+		pkg_path := "time"
+		type_name := "Time"
+		if nullable {
+			pkg_path = "github.com/go-sql-driver/mysql"
+			type_name = "NullTime"
+		}
+		tn, err := tctx.CreateTypeName(pkg_path, type_name)
+		if err != nil {
+			panic(err)
+		}
+		return tn
+	default:
+		return nil
 	}
-	tctx.OverrideAdaptType("datetime", tn)
-	tctx.OverrideAdaptType("date", tn)
-	tctx.OverrideAdaptType("timestamp", tn)
-	return nil
+}
+
+// Use 'time.Time'/'mysql.NullTime' for datetime/date/timestamp field type
+// (generated code depends on "github.com/go-sql-driver/mysql")
+func (tctx *TypeContext) UseMySQLNullTime() {
+	tctx.AddCustomTypeAdapter(mysqlNullTimeAdapter)
 }
 
 // Main method of TypeContext. Find a type suitable to store a db field data.
 func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
+	// Iterate custom adapters in reverse order
+	for i := len(tctx.customTypeAdapter) - 1; i >= 0; i -= 1 {
+		tn := tctx.customTypeAdapter[i](tctx, ft)
+		if tn != nil {
+			return tn, nil
+		}
+	}
+
 	// see: github.com/pingcap/tidb/mysql/type.go and github.com/pingcap/tidb/util/types/field_type.go
 	cls := ft.ToClass()
 	tp := ft.Tp
@@ -231,10 +245,6 @@ func (tctx *TypeContext) AdaptType(ft *ts.FieldType) (*TypeName, error) {
 	nullable := !mysql.HasNotNullFlag(flag)
 	unsigned := mysql.HasUnsignedFlag(flag)
 	binary := mysql.HasBinaryFlag(flag)
-
-	if tn, ok := tctx.overridedAdaptTypes[strings.ToLower(ts.TypeToStr(ft.Tp, ft.Charset))]; ok {
-		return tn, nil
-	}
 
 	switch cls {
 	case ts.ClassInt:
