@@ -106,13 +106,13 @@ func main() {
 	ri := render.NewRenderInfo(ctx)
 
 	for _, table_data := range dbdata.Tables {
-		err := ri.Run(ctx, table_data, &out)
+		err := ri.Run(table_data, &out)
 		if err != nil {
 			log.Fatalf("render.Render: %s", err)
 		}
 	}
 
-	if true {
+	if false {
 		formatted, err := format.Source(out.Bytes())
 		if err != nil {
 			log.Fatalf("format.Source: %s", err)

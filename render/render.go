@@ -32,6 +32,8 @@ type RenderInfo struct {
 
 	// Extra functions used in templates.
 	extraFuncs template.FuncMap
+
+	ctx *context.Context
 }
 
 func (r *RenderInfo) defaultTmpl(obj interface{}) *template.Template {
@@ -54,6 +56,7 @@ func NewRenderInfo(ctx *context.Context) *RenderInfo {
 	ret := &RenderInfo{
 		tmpls:      make(map[reflect.Type][]*template.Template),
 		extraFuncs: buildExtraFuncs(ctx),
+		ctx:        ctx,
 	}
 	for t, text := range default_type_templates {
 		tmpl := template.New("default").Funcs(ret.extraFuncs)
@@ -86,7 +89,7 @@ func (r *RenderInfo) AddTemplate(obj interface{}, name string, text string) erro
 }
 
 // Render.
-func (r *RenderInfo) Run(ctx *context.Context, obj interface{}, w io.Writer) error {
+func (r *RenderInfo) Run(obj interface{}, w io.Writer) error {
 	tmpl := r.currentTmpl(obj)
 	if tmpl == nil {
 		return fmt.Errorf("Render: don't know how to render %T", obj)
@@ -97,7 +100,7 @@ func (r *RenderInfo) Run(ctx *context.Context, obj interface{}, w io.Writer) err
 		return fmt.Errorf("Render: GetHandler return nil for %T", obj)
 	}
 
-	dot, err := h(ctx, obj)
+	dot, err := h(r.ctx, obj)
 	if err != nil {
 		return err
 	}
