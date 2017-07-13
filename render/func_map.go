@@ -67,6 +67,11 @@ func placeholder() string {
 
 // Return '?, ?, ?, ...'
 func placeholderList(n int) string {
+	if n <= 0 {
+		return ""
+	} else if n == 1 {
+		return placeholder()
+	}
 	s := strings.Repeat(placeholder()+", ", n)
 	return s[:len(s)-2]
 }
