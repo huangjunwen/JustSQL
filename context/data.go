@@ -77,6 +77,11 @@ func NewTableData(ctx *Context, tableinfo *model.TableInfo) (*TableData, error) 
 		}
 	}
 
+	if indexdata := NewIndexDataFromPKHandler(ctx, tableinfo); indexdata != nil {
+		ret.Indices = append(ret.Indices, indexdata)
+		ret.Primary = indexdata
+	}
+
 	for _, indexinfo := range tableinfo.Indices {
 		indexdata, err := NewIndexData(ctx, indexinfo)
 		if err != nil {
@@ -84,6 +89,9 @@ func NewTableData(ctx *Context, tableinfo *model.TableInfo) (*TableData, error) 
 		}
 		ret.Indices = append(ret.Indices, indexdata)
 		if indexdata.Primary {
+			if ret.Primary != nil {
+				panic(fmt.Errorf("Multiple primary index found in table %q", ret.Name.O))
+			}
 			ret.Primary = indexdata
 		}
 	}
@@ -198,6 +206,20 @@ func NewIndexData(ctx *Context, indexinfo *model.IndexInfo) (*IndexData, error) 
 		ret.ColumnIndices = append(ret.ColumnIndices, column.Offset)
 	}
 	return ret, nil
+}
+
+// see: https://github.com/pingcap/tidb/issues/3746
+func NewIndexDataFromPKHandler(ctx *Context, tableinfo *model.TableInfo) *IndexData {
+	if !tableinfo.PKIsHandle {
+		return nil
+	}
+	columninfo := tableinfo.GetPkColInfo()
+	return &IndexData{
+		Name:          utils.NewStr("PRIMARY"),
+		Unique:        true,
+		Primary:       true,
+		ColumnIndices: []int{columninfo.Offset},
+	}
 }
 
 // FKData contains meta data of a foreign key.
