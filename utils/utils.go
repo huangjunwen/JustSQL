@@ -4,6 +4,7 @@ import (
 	"github.com/pingcap/tidb/model"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 var ident_re *regexp.Regexp = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
@@ -15,8 +16,8 @@ func IsIdent(s string) bool {
 
 var word_re *regexp.Regexp = regexp.MustCompile(`[^A-Za-z]*([A-Za-z])([A-Za-z0-9]*)`)
 
-// Convert a string to camel case.
-func CamelCase(s string) string {
+// Convert a string to pascal case. Example: "pascal_case" -> "PascalCase"
+func PascalCase(s string) string {
 	parts := []string{}
 	for _, m := range word_re.FindAllStringSubmatch(s, -1) {
 		parts = append(parts, strings.ToUpper(m[1]), m[2])
@@ -24,20 +25,29 @@ func CamelCase(s string) string {
 	return strings.Join(parts, "")
 }
 
+// Convert a string to camel case. Example: "camel_case" -> "camelCase"
+func CamelCase(s string) string {
+	b := []byte(PascalCase(s))
+	b[0] = byte(unicode.ToLower(rune(b[0])))
+	return string(b)
+}
+
 // String and its variants. (CamelCase/...)
 type Str struct {
-	O         string
-	CamelCase string
+	O          string // hello_world
+	camelCase  string // helloWorld
+	pascalCase string // HelloWorld
 }
 
 func (s Str) String() string {
-	return s.CamelCase
+	return s.pascalCase
 }
 
 func NewStr(s string) Str {
 	return Str{
-		O:         s,
-		CamelCase: CamelCase(s),
+		O:          s,
+		camelCase:  CamelCase(s),
+		pascalCase: PascalCase(s),
 	}
 }
 
