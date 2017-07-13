@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"github.com/huangjunwen/JustSQL/context"
 	"github.com/huangjunwen/JustSQL/render"
 	"github.com/pingcap/tidb/ast"
@@ -76,8 +77,6 @@ func main() {
 	// Parse cmd args.
 	flag.Parse()
 
-	var out bytes.Buffer
-
 	if *ddl_dir != "" {
 		if !checkDir(*ddl_dir) {
 			log.Fatalf("-ddl: %q do not exist or it's not a directory", *ddl_dir)
@@ -101,26 +100,37 @@ func main() {
 	}
 
 	// XXX: Test name conflict
-	ctx.CurrScope().UsePkg("hello/fmt")
+	//ctx.CurrScope().UsePkg("hello/fmt")
 
+	var all, body bytes.Buffer
 	ri := render.NewRenderInfo(ctx)
 
 	for _, table_data := range dbdata.Tables {
-		err := ri.Run(table_data, &out)
+		err := ri.Run(table_data, &body)
 		if err != nil {
 			log.Fatalf("render.Render: %s", err)
 		}
 	}
 
-	if false {
-		formatted, err := format.Source(out.Bytes())
+	all.Write([]byte("package model\n\n"))
+	all.Write([]byte("import (\n"))
+	for _, pkg := range ctx.TypeContext.CurrScope().ListPkg() {
+		pkg_path, pkg_name := pkg[0], pkg[1]
+		all.Write([]byte(fmt.Sprintf("\t%s %q\n", pkg_name, pkg_path)))
+	}
+	all.Write([]byte(")\n"))
+
+	io.Copy(&all, &body)
+
+	if true {
+		formatted, err := format.Source(all.Bytes())
 		if err != nil {
 			log.Fatalf("format.Source: %s", err)
 		}
 
 		io.Copy(os.Stdout, bytes.NewBuffer(formatted))
 	} else {
-		io.Copy(os.Stdout, &out)
+		io.Copy(os.Stdout, &all)
 	}
 
 }

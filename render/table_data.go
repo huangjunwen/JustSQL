@@ -109,12 +109,14 @@ func (entry *{{ $struct_name }}) Insert(ctx {{ $ctx }}.Context, db *{{ $sql }}.D
 	{{ $cols := columns_for_insert .Table -}}
 	const sql = "INSERT INTO {{ .Table.Name.O }} ({{ printf "%s" (column_name_list $cols) }}) VALUES ({{ printf "%s" (placeholder_list (len $cols)) }})"
 
-	res, err := db.ExecContext(ctx, sql{{ range $i, $col := $cols }}, entry.{{ $col.Name }}{{ end }})
+	{{ $has_auto_inc := not_nil .Table.AutoIncrementColumn -}}
+
+	{{ if $has_auto_inc }}res{{ else }}_{{ end }}, err := db.ExecContext(ctx, sql{{ range $i, $col := $cols }}, entry.{{ $col.Name }}{{ end }})
 	if err != nil {
 		return err
 	}
 
-	{{ if not_nil .Table.AutoIncrementColumn -}}
+	{{ if $has_auto_inc -}}
 	last_insert_id, err := res.LastInsertId()
 	if err != nil {
 		return err
