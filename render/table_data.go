@@ -66,7 +66,7 @@ func (e *{{ $enum_name }}) Scan(value interface{}) error {
 		return {{ $fmt }}.Errorf("Expect string to scan Enum {{ printf "%s" $enum_name }}")
 	}
 	if !check{{ $enum_name }}Value(s) {
-		return {{ $fmt }}.Errorf("Unknown enum value %+q for {{ printf "%s" $enum_name }}", s)
+		return {{ $fmt }}.Errorf("Invalid enum value %+q for {{ printf "%s" $enum_name }}", s)
 	}
 	e.val = s
 	e.valid = true
@@ -95,17 +95,72 @@ func (e {{ $enum_name }}) Value() (driver.Value, error) {
 type {{ $struct_name }} struct {
 {{ range $i, $column := .Table.Columns }}
 	{{- if $column.IsEnum }}
-	{{ $column.Name }} {{ $.Table.Name }}{{ $column.Name }} // {{ $column.Name.O }}
+	{{ $column.Name }} {{ $.Table.Name }}{{ $column.Name }}
 	{{- else if $column.IsSet }}
-	{{ $column.Name }} {{ $.Table.Name }}{{ $column.Name }} // {{ $column.Name.O }}
+	{{ $column.Name }} {{ $.Table.Name }}{{ $column.Name }}
 	{{- else }}
-	{{ $column.Name }} {{ $column.Type }} // {{ $column.Name.O }}
+	{{ $column.Name }} {{ $column.Type }}
 	{{- end -}}
-{{ end }}
+	{{- " " -}}// {{ $column.Name.O }}: {{ if $column.IsNotNULL }}NOT NULL;{{ else }}NULL;{{ end }}{{ if $column.IsAutoIncrement }} AUTO INCREMENT;{{ end }} DEFAULT {{ printf "%#v" $column.DefaultValue }};{{ if $column.IsOnUpdateNow }} ON UPDATE "CURRENT_TIMESTAMP";{{ end }}
+{{- end }}
 }
 
 func (entry *{{ $struct_name }}) Insert(ctx {{ $ctx }}.Context, db *{{ $sql }}.DB) error {
+	{{ $cols := columns_for_insert .Table -}}
+	const sql = "INSERT INTO {{ .Table.Name.O }} ({{ printf "%s" (column_name_list $cols) }}) VALUES ({{ printf "%s" (placeholder_list (len $cols)) }})"
+
+	res, err := db.ExecContext(ctx, sql{{ range $i, $col := $cols }}, entry.{{ $col.Name }}{{ end }})
+	if err != nil {
+		return err
+	}
+
+	{{ if not_nil .Table.AutoIncrementColumn -}}
+	last_insert_id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+
+	entry.{{ .Table.AutoIncrementColumn.Name }} = {{ .Table.AutoIncrementColumn.Type }}(last_insert_id)
+	{{ end -}}
+
+	return nil
 }
+
+{{ if not_nil .Table.Primary -}}
+func {{ $struct_name }}ByPrimaryKey(ctx {{ $ctx }}.Context, db *{{ $sql }}.DB{{ range $i, $col := .Table.PrimaryColumns }}, {{ $col.Name.CamelCase }} {{ $col.Type }}{{ end }}) (*{{ $struct_name }}, error) {
+	{{ $cols := .Table.Columns -}}
+	const sql = "SELECT {{ printf "%s" (column_name_list $cols) }} FROM {{ .Table.Name.O }} " +
+		"WHERE {{ range $i, $col := .Table.PrimaryColumns }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }} LIMIT 2"
+
+	rows, err := db.QueryContext(ctx, sql{{ range $i, $col := .Table.PrimaryColumns }}, {{ $col.Name.CamelCase }}{{ end }})
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ret := {{ $struct_name }}{}
+	cnt := 0
+	for rows.Next() {
+		cnt += 1
+		if cnt >= 2 {
+			return nil, {{ $fmt }}.Errorf("{{ $struct_name }}ByPrimaryKey returns more than one entry.")
+		}
+		if err := rows.Scan({{ range $i, $col := $cols }}{{ if ne $i 0 }}, {{ end }}&ret.{{ $col.Name }}{{ end }}); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if cnt == 0 {
+		return nil, nil
+	}
+
+	return &ret, nil
+}
+{{ end -}}
 
 `
 	RegistDefaultTypeTemplate((*context.TableData)(nil), t)
