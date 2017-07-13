@@ -35,19 +35,19 @@ func CamelCase(s string) string {
 // String and its variants. (CamelCase/...)
 type Str struct {
 	O          string // hello_world
-	camelCase  string // helloWorld
-	pascalCase string // HelloWorld
+	CamelCase  string // helloWorld
+	PascalCase string // HelloWorld
 }
 
 func (s Str) String() string {
-	return s.pascalCase
+	return s.PascalCase
 }
 
 func NewStr(s string) Str {
 	return Str{
 		O:          s,
-		camelCase:  CamelCase(s),
-		pascalCase: PascalCase(s),
+		CamelCase:  CamelCase(s),
+		PascalCase: PascalCase(s),
 	}
 }
 
