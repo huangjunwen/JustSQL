@@ -99,6 +99,18 @@ func NewTableData(ctx *Context, tableinfo *model.TableInfo) (*TableData, error) 
 	return ret, nil
 }
 
+// Return primary key columns.
+func (t *TableData) PrimaryColumns() []*ColumnData {
+	if t.Primary == nil {
+		return nil
+	}
+	ret := make([]*ColumnData, 0, len(t.Primary.ColumnIndices))
+	for _, col_idx := range t.Primary.ColumnIndices {
+		ret = append(ret, t.Columns[col_idx])
+	}
+	return ret
+}
+
 // Retrive column by its name.
 func (t *TableData) ColumnByName(name string) *ColumnData {
 	i, ok := t.columnIndex[name]
