@@ -10,6 +10,7 @@ func init() {
 {{- $ctx := imp "context" -}}
 {{- $fmt := imp "fmt" -}}
 {{- $sql := imp "database/sql" -}}
+{{- $driver := imp "database/sql/driver" -}}
 
 {{/* enum and set types */}}
 {{ range $i, $column := .Table.Columns }}
@@ -61,10 +62,17 @@ func (e *{{ $enum_name }}) Scan(value interface{}) error {
 		e.valid = false
 		return nil
 	}
-	s, ok := value.(string) 
-	if !ok {
-		return {{ $fmt }}.Errorf("Expect string to scan Enum {{ printf "%s" $enum_name }}")
+
+	var s string
+	switch value.(type) {
+	case []byte:
+		s = string(value.([]byte))
+	case string:
+		s = value.(string)
+	default:
+		return {{ $fmt }}.Errorf("Expect string/[]byte to scan Enum {{ printf "%s" $enum_name }} but got %T", value)
 	}
+
 	if !check{{ $enum_name }}Value(s) {
 		return {{ $fmt }}.Errorf("Invalid enum value %+q for {{ printf "%s" $enum_name }}", s)
 	}
@@ -88,53 +96,52 @@ func (e {{ $enum_name }}) Value() (driver.Value, error) {
 	{{- end -}}
 {{ end }}
 
-{{/* main struct */}}
+{{/* declare some common vars */}}
 {{- $table_name := .Table.Name.O -}}
 {{- $struct_name := .Table.Name -}}
+{{- $cols := .Table.Columns -}}
+{{- $auto_inc_col := .Table.AutoIncColumn -}}
+{{- $primary_cols := .Table.PrimaryColumns -}}
+{{- $insert_cols := .Table.InsertColumns -}}
+
 // Table {{ $table_name }}
 type {{ $struct_name }} struct {
-{{ range $i, $column := .Table.Columns }}
-	{{- if $column.IsEnum }}
-	{{ $column.Name }} {{ $.Table.Name }}{{ $column.Name }}
-	{{- else if $column.IsSet }}
-	{{ $column.Name }} {{ $.Table.Name }}{{ $column.Name }}
+{{ range $i, $col := $cols }}
+	{{- if or $col.IsEnum $col.IsSet }}
+	{{ $col.Name }} {{ $struct_name }}{{ $col.Name }}
 	{{- else }}
-	{{ $column.Name }} {{ $column.Type }}
+	{{ $col.Name }} {{ $col.Type }}
 	{{- end -}}
-	{{- " " -}}// {{ $column.Name.O }}: {{ if $column.IsNotNULL }}NOT NULL;{{ else }}NULL;{{ end }}{{ if $column.IsAutoIncrement }} AUTO INCREMENT;{{ end }} DEFAULT {{ printf "%#v" $column.DefaultValue }};{{ if $column.IsOnUpdateNow }} ON UPDATE "CURRENT_TIMESTAMP";{{ end }}
+	{{- " " -}}// {{ $col.Name.O }}: {{ if $col.IsNotNULL }}NOT NULL;{{ else }}NULL;{{ end }}{{ if $col.IsAutoIncrement }} AUTO INCREMENT;{{ end }} DEFAULT {{ printf "%#v" $col.DefaultValue }};{{ if $col.IsOnUpdateNow }} ON UPDATE "CURRENT_TIMESTAMP";{{ end }}
 {{- end }}
 }
 
 func (entry *{{ $struct_name }}) Insert(ctx {{ $ctx }}.Context, db *{{ $sql }}.DB) error {
-	{{ $cols := columns_for_insert .Table -}}
-	const sql = "INSERT INTO {{ .Table.Name.O }} ({{ printf "%s" (column_name_list $cols) }}) VALUES ({{ printf "%s" (placeholder_list (len $cols)) }})"
+	const sql = "INSERT INTO {{ $table_name }} ({{ printf "%s" (column_name_list $insert_cols) }}) VALUES ({{ printf "%s" (placeholder_list (len $insert_cols)) }})"
 
-	{{ $has_auto_inc := not_nil .Table.AutoIncrementColumn -}}
-
-	{{ if $has_auto_inc }}res{{ else }}_{{ end }}, err := db.ExecContext(ctx, sql{{ range $i, $col := $cols }}, entry.{{ $col.Name }}{{ end }})
+	{{ if not_nil $auto_inc_col }}res{{ else }}_{{ end }}, err := db.ExecContext(ctx, sql{{ range $i, $col := $insert_cols }}, entry.{{ $col.Name }}{{ end }})
 	if err != nil {
 		return err
 	}
 
-	{{ if $has_auto_inc -}}
+	{{ if not_nil $auto_inc_col -}}
 	last_insert_id, err := res.LastInsertId()
 	if err != nil {
 		return err
 	}
 
-	entry.{{ .Table.AutoIncrementColumn.Name }} = {{ .Table.AutoIncrementColumn.Type }}(last_insert_id)
+	entry.{{ $auto_inc_col.Name }} = {{ $auto_inc_col.Type }}(last_insert_id)
 	{{ end -}}
 
 	return nil
 }
 
-{{ if not_nil .Table.Primary -}}
-func {{ $struct_name }}ByPrimaryKey(ctx {{ $ctx }}.Context, db *{{ $sql }}.DB{{ range $i, $col := .Table.PrimaryColumns }}, {{ $col.Name.CamelCase }} {{ $col.Type }}{{ end }}) (*{{ $struct_name }}, error) {
-	{{ $cols := .Table.Columns -}}
-	const sql = "SELECT {{ printf "%s" (column_name_list $cols) }} FROM {{ .Table.Name.O }} " +
-		"WHERE {{ range $i, $col := .Table.PrimaryColumns }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }} LIMIT 2"
+{{ if ne (len $primary_cols) 0 -}}
+func {{ $struct_name }}ByPrimaryKey(ctx {{ $ctx }}.Context, db *{{ $sql }}.DB{{ range $i, $col := $primary_cols }}, {{ $col.Name.CamelCase }} {{ $col.Type }}{{ end }}) (*{{ $struct_name }}, error) {
+	const sql = "SELECT {{ printf "%s" (column_name_list $cols) }} FROM {{ $table_name }} " +
+		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }} LIMIT 2"
 
-	rows, err := db.QueryContext(ctx, sql{{ range $i, $col := .Table.PrimaryColumns }}, {{ $col.Name.CamelCase }}{{ end }})
+	rows, err := db.QueryContext(ctx, sql{{ range $i, $col := $primary_cols }}, {{ $col.Name.CamelCase }}{{ end }})
 	if err != nil {
 		return nil, err
 	}

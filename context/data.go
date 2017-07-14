@@ -44,42 +44,42 @@ type TableData struct {
 	ForeignKeys []*FKData
 
 	// Shortcut
-	Primary             *IndexData
-	AutoIncrementColumn *ColumnData
+	primaryIndex  *IndexData
+	autoIncColumn *ColumnData
 
 	// column name -> column index
-	columnIndex map[string]int
+	columnByName map[string]*ColumnData
 }
 
 func NewTableData(ctx *Context, tableinfo *model.TableInfo) (*TableData, error) {
 	ret := &TableData{
-		TableInfo:   tableinfo,
-		Name:        utils.NewStrFromCIStr(tableinfo.Name),
-		Columns:     make([]*ColumnData, 0, len(tableinfo.Columns)),
-		Indices:     make([]*IndexData, 0, len(tableinfo.Indices)),
-		ForeignKeys: make([]*FKData, 0, len(tableinfo.ForeignKeys)),
-		columnIndex: make(map[string]int),
+		TableInfo:    tableinfo,
+		Name:         utils.NewStrFromCIStr(tableinfo.Name),
+		Columns:      make([]*ColumnData, 0, len(tableinfo.Columns)),
+		Indices:      make([]*IndexData, 0, len(tableinfo.Indices)),
+		ForeignKeys:  make([]*FKData, 0, len(tableinfo.ForeignKeys)),
+		columnByName: make(map[string]*ColumnData),
 	}
 
-	for i, columninfo := range tableinfo.Columns {
+	for _, columninfo := range tableinfo.Columns {
 		columndata, err := NewColumnData(ctx, columninfo)
 		if err != nil {
 			return nil, err
 		}
 		ret.Columns = append(ret.Columns, columndata)
-		ret.columnIndex[columndata.Name.O] = i
+		ret.columnByName[columndata.Name.O] = columndata
 
 		if columndata.IsAutoIncrement {
-			if ret.AutoIncrementColumn != nil {
+			if ret.autoIncColumn != nil {
 				panic(fmt.Errorf("Multiple auto increment columns found in table %q", ret.Name.O))
 			}
-			ret.AutoIncrementColumn = columndata
+			ret.autoIncColumn = columndata
 		}
 	}
 
 	if indexdata := NewIndexDataFromPKHandler(ctx, tableinfo); indexdata != nil {
 		ret.Indices = append(ret.Indices, indexdata)
-		ret.Primary = indexdata
+		ret.primaryIndex = indexdata
 	}
 
 	for _, indexinfo := range tableinfo.Indices {
@@ -89,10 +89,10 @@ func NewTableData(ctx *Context, tableinfo *model.TableInfo) (*TableData, error) 
 		}
 		ret.Indices = append(ret.Indices, indexdata)
 		if indexdata.Primary {
-			if ret.Primary != nil {
+			if ret.primaryIndex != nil {
 				panic(fmt.Errorf("Multiple primary index found in table %q", ret.Name.O))
 			}
-			ret.Primary = indexdata
+			ret.primaryIndex = indexdata
 		}
 	}
 
@@ -107,25 +107,50 @@ func NewTableData(ctx *Context, tableinfo *model.TableInfo) (*TableData, error) 
 	return ret, nil
 }
 
-// Return primary key columns.
+// Return primary key columns if exists.
 func (t *TableData) PrimaryColumns() []*ColumnData {
-	if t.Primary == nil {
+	if t.primaryIndex == nil {
 		return nil
 	}
-	ret := make([]*ColumnData, 0, len(t.Primary.ColumnIndices))
-	for _, col_idx := range t.Primary.ColumnIndices {
+	ret := make([]*ColumnData, 0, len(t.primaryIndex.ColumnIndices))
+	for _, col_idx := range t.primaryIndex.ColumnIndices {
 		ret = append(ret, t.Columns[col_idx])
+	}
+	return ret
+}
+
+// Return auto increment column if exists.
+func (t *TableData) AutoIncColumn() *ColumnData {
+	return t.autoIncColumn
+}
+
+// Return columns that need explicit values to insert.
+func (t *TableData) InsertColumns() []*ColumnData {
+	ret := make([]*ColumnData, 0, len(t.Columns))
+	for _, col := range t.Columns {
+		// Skip auto increment column
+		if col.IsAutoIncrement {
+			continue
+		}
+		// Skip time column with default now()
+		switch tp := col.ColumnInfo.FieldType.Tp; tp {
+		case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
+			if col.DefaultValue == interface{}("CURRENT_TIMESTAMP") {
+				continue
+			}
+		}
+		ret = append(ret, col)
 	}
 	return ret
 }
 
 // Retrive column by its name.
 func (t *TableData) ColumnByName(name string) *ColumnData {
-	i, ok := t.columnIndex[name]
+	ret, ok := t.columnByName[name]
 	if !ok {
 		return nil
 	}
-	return t.Columns[i]
+	return ret
 }
 
 // ColumnData contains meta data of a column.

@@ -112,7 +112,7 @@ func main() {
 		}
 	}
 
-	all.Write([]byte("package model\n\n"))
+	all.Write([]byte("package main\n\n"))
 	all.Write([]byte("import (\n"))
 	for _, pkg := range ctx.TypeContext.CurrScope().ListPkg() {
 		pkg_path, pkg_name := pkg[0], pkg[1]

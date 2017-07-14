@@ -2,7 +2,6 @@ package render
 
 import (
 	"github.com/huangjunwen/JustSQL/context"
-	"github.com/pingcap/tidb/mysql"
 	"reflect"
 	"strings"
 	"text/template"
@@ -17,39 +16,6 @@ func notNil(v interface{}) (res bool) {
 	}()
 	res = !reflect.ValueOf(v).IsNil()
 	return
-}
-
-// Return columns that need explicit values to insert.
-func columnsForInsert(table *context.TableData) []*context.ColumnData {
-	ret := make([]*context.ColumnData, 0)
-	for _, col := range table.Columns {
-		// Skip auto increment column
-		if col.IsAutoIncrement {
-			continue
-		}
-		// Skip time column with default now()
-		switch tp := col.ColumnInfo.FieldType.Tp; tp {
-		case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-			if col.DefaultValue == interface{}("CURRENT_TIMESTAMP") {
-				continue
-			}
-		}
-		ret = append(ret, col)
-	}
-	return ret
-}
-
-// Return columns that need explicit values to update.
-func columnsForUpdate(table *context.TableData) []*context.ColumnData {
-	ret := make([]*context.ColumnData, 0)
-	for _, col := range table.Columns {
-		// Skip ON UPDATE CURRENT_TIMESTAMP
-		if col.IsOnUpdateNow {
-			continue
-		}
-		ret = append(ret, col)
-	}
-	return ret
 }
 
 // Return 'col1, col2, col3, ...'
@@ -86,13 +52,11 @@ func buildExtraFuncs(ctx *context.Context) template.FuncMap {
 	}
 
 	return template.FuncMap{
-		"imp":                imp,
-		"not_nil":            notNil,
-		"columns_for_insert": columnsForInsert,
-		"columns_for_update": columnsForUpdate,
-		"column_name_list":   columnNameList,
-		"placeholder":        placeholder,
-		"placeholder_list":   placeholderList,
+		"imp":              imp,
+		"not_nil":          notNil,
+		"column_name_list": columnNameList,
+		"placeholder":      placeholder,
+		"placeholder_list": placeholderList,
 	}
 
 }
