@@ -109,7 +109,7 @@ const (
 func New{{ $set_name }}(items ...uint64) {{ $set_name }} {
 	var val uint64 = 0
 	for _, item := range items {
-		if item > 0 && (item & (item - 1)) == 0 && item < (1 << {{ len $col.Elems }}) {
+		if item > 0 && (item & (item - 1)) == 0 && item <= (1 << ({{ len $col.Elems }} - 1)) {
 			val |= item 
 		}
 	}
