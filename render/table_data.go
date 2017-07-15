@@ -102,7 +102,7 @@ func (e {{ $enum_name }}) Value() (driver.Value, error) {
 {{- $cols := .Table.Columns -}}
 {{- $auto_inc_col := .Table.AutoIncColumn -}}
 {{- $primary_cols := .Table.PrimaryColumns -}}
-{{- $insert_cols := .Table.InsertColumns -}}
+{{- $non_primary_cols := .Table.NonPrimaryColumns -}}
 
 // Table {{ $table_name }}
 type {{ $struct_name }} struct {
@@ -116,58 +116,74 @@ type {{ $struct_name }} struct {
 {{- end }}
 }
 
-func (entry *{{ $struct_name }}) Insert(ctx {{ $ctx }}.Context, db *{{ $sql }}.DB) error {
-	const sql = "INSERT INTO {{ $table_name }} ({{ printf "%s" (column_name_list $insert_cols) }}) VALUES ({{ printf "%s" (placeholder_list (len $insert_cols)) }})"
+func (entry_ *{{ $struct_name }}) Insert(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
+	const sql_ = "INSERT INTO {{ $table_name }} ({{ printf "%s" (column_name_list $cols) }}) VALUES ({{ printf "%s" (placeholder_list (len $cols)) }})"
 
-	{{ if not_nil $auto_inc_col }}res{{ else }}_{{ end }}, err := db.ExecContext(ctx, sql{{ range $i, $col := $insert_cols }}, entry.{{ $col.Name }}{{ end }})
-	if err != nil {
-		return err
+	{{ if not_nil $auto_inc_col }}res_{{ else }}_{{ end }}, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $cols }}, entry_.{{ $col.Name }}{{ end }})
+	if err_ != nil {
+		return err_
 	}
 
 	{{ if not_nil $auto_inc_col -}}
-	last_insert_id, err := res.LastInsertId()
-	if err != nil {
-		return err
+	last_insert_id_, err_ := res_.LastInsertId()
+	if err_ != nil {
+		return err_
 	}
 
-	entry.{{ $auto_inc_col.Name }} = {{ $auto_inc_col.Type }}(last_insert_id)
+	entry_.{{ $auto_inc_col.Name }} = {{ $auto_inc_col.Type }}(last_insert_id_)
 	{{ end -}}
 
 	return nil
 }
 
 {{ if ne (len $primary_cols) 0 -}}
-func {{ $struct_name }}ByPrimaryKey(ctx {{ $ctx }}.Context, db *{{ $sql }}.DB{{ range $i, $col := $primary_cols }}, {{ $col.Name.CamelCase }} {{ $col.Type }}{{ end }}) (*{{ $struct_name }}, error) {
-	const sql = "SELECT {{ printf "%s" (column_name_list $cols) }} FROM {{ $table_name }} " +
+
+{{ if ne (len $non_primary_cols) 0 -}}
+func (entry_ *{{ $struct_name }}) Update(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
+	const sql_ = "UPDATE {{ $table_name }} SET {{ range $i, $col := $non_primary_cols }}{{ if ne $i 0 }}, {{ end }}{{ $col.Name.O }}={{ placeholder }}{{ end }}" +
+		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }}"
+
+	res_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $non_primary_cols }}, entry_.{{ $col.Name }}{{ end }}{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
+	if err_ != nil {
+		return err_
+	}
+
+	return nil
+
+}
+{{ end }}
+
+func {{ $struct_name }}ByPrimaryKey(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx{{ range $i, $col := $primary_cols }}, {{ $col.Name.CamelCase }} {{ $col.Type }}{{ end }}) (*{{ $struct_name }}, error) {
+	const sql_ = "SELECT {{ printf "%s" (column_name_list $cols) }} FROM {{ $table_name }} " +
 		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }} LIMIT 2"
 
-	rows, err := db.QueryContext(ctx, sql{{ range $i, $col := $primary_cols }}, {{ $col.Name.CamelCase }}{{ end }})
-	if err != nil {
-		return nil, err
+	rows_, err_ := tx_.QueryContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, {{ $col.Name.CamelCase }}{{ end }})
+	if err_ != nil {
+		return nil, err_
 	}
-	defer rows.Close()
+	defer rows_.Close()
 
-	ret := {{ $struct_name }}{}
-	cnt := 0
-	for rows.Next() {
-		cnt += 1
-		if cnt >= 2 {
+	ret_ := {{ $struct_name }}{}
+	cnt_ := 0
+	for rows_.Next() {
+		cnt_ += 1
+		if cnt_ >= 2 {
 			return nil, {{ $fmt }}.Errorf("{{ $struct_name }}ByPrimaryKey returns more than one entry.")
 		}
-		if err := rows.Scan({{ range $i, $col := $cols }}{{ if ne $i 0 }}, {{ end }}&ret.{{ $col.Name }}{{ end }}); err != nil {
-			return nil, err
+		if err_ := rows_.Scan({{ range $i, $col := $cols }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $col.Name }}{{ end }}); err_ != nil {
+			return nil, err_
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
+	if err_ := rows_.Err(); err_ != nil {
+		return nil, err_
 	}
 
-	if cnt == 0 {
+	if cnt_ == 0 {
 		return nil, nil
 	}
 
-	return &ret, nil
+	return &ret_, nil
 }
 {{ end -}}
 

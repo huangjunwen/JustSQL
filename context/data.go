@@ -119,29 +119,30 @@ func (t *TableData) PrimaryColumns() []*ColumnData {
 	return ret
 }
 
+// Return non-primary columns if exists.
+func (t *TableData) NonPrimaryColumns() []*ColumnData {
+	if t.primaryIndex == nil {
+		return t.Columns
+	}
+	is_primary := make([]bool, len(t.Columns))
+	for _, col_idx := range t.primaryIndex.ColumnIndices {
+		is_primary[col_idx] = true
+	}
+
+	ret := make([]*ColumnData, 0, len(t.Columns)-len(t.primaryIndex.ColumnIndices))
+	for i, b := range is_primary {
+		if b {
+			continue
+		}
+		ret = append(ret, t.Columns[i])
+	}
+	return ret
+
+}
+
 // Return auto increment column if exists.
 func (t *TableData) AutoIncColumn() *ColumnData {
 	return t.autoIncColumn
-}
-
-// Return columns that need explicit values to insert.
-func (t *TableData) InsertColumns() []*ColumnData {
-	ret := make([]*ColumnData, 0, len(t.Columns))
-	for _, col := range t.Columns {
-		// Skip auto increment column
-		if col.IsAutoIncrement {
-			continue
-		}
-		// Skip time column with default now()
-		switch tp := col.ColumnInfo.FieldType.Tp; tp {
-		case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-			if col.DefaultValue == interface{}("CURRENT_TIMESTAMP") {
-				continue
-			}
-		}
-		ret = append(ret, col)
-	}
-	return ret
 }
 
 // Retrive column by its name.
