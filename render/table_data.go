@@ -133,11 +133,7 @@ func (entry_ *{{ $struct_name }}) Select(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 	const sql_ = "SELECT {{ printf "%s" (column_name_list $cols) }} FROM {{ $table_name }} " +
 		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }} LIMIT 2"
 
-	row_, err_ := tx_.QueryRowContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
-	if err_ != nil {
-		return err_
-	}
-	
+	row_ := tx_.QueryRowContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
 	if err_ := row_.Scan({{ range $i, $col := $cols }}{{ if ne $i 0 }}, {{ end }}&entry_.{{ $col.Name }}{{ end }}); err_ != nil {
 		return err_
 	}
@@ -150,7 +146,7 @@ func (entry_ *{{ $struct_name }}) Update(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 	const sql_ = "UPDATE {{ $table_name }} SET {{ range $i, $col := $non_primary_cols }}{{ if ne $i 0 }}, {{ end }}{{ $col.Name.O }}={{ placeholder }}{{ end }}" +
 		" WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }}"
 
-	res_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $non_primary_cols }}, entry_.{{ $col.Name }}{{ end }}{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
+	_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $non_primary_cols }}, entry_.{{ $col.Name }}{{ end }}{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
 	if err_ != nil {
 		return err_
 	}
@@ -163,7 +159,7 @@ func (entry_ *{{ $struct_name }}) Delete(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 	const sql_ = "DELETE FROM {{ $table_name }} " +
 		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }}"
 
-	res_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
+	_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
 	if err_ != nil {
 		return err_
 	}
