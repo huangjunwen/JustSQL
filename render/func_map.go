@@ -2,6 +2,7 @@ package render
 
 import (
 	"github.com/huangjunwen/JustSQL/context"
+	"github.com/huangjunwen/JustSQL/utils"
 	"reflect"
 	"strings"
 	"text/template"
@@ -57,6 +58,7 @@ func buildExtraFuncs(ctx *context.Context) template.FuncMap {
 		"column_name_list": columnNameList,
 		"placeholder":      placeholder,
 		"placeholder_list": placeholderList,
+		"pascal":           utils.PascalCase,
 	}
 
 }

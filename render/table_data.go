@@ -6,97 +6,17 @@ import (
 
 func init() {
 	t := `
-{{/* imports */}}
+{{/* =========================== */}}
+{{/*          imports            */}}
+{{/* =========================== */}}
 {{- $ctx := imp "context" -}}
 {{- $fmt := imp "fmt" -}}
 {{- $sql := imp "database/sql" -}}
 {{- $driver := imp "database/sql/driver" -}}
 
-{{/* enum and set types */}}
-{{ range $i, $column := .Table.Columns }}
-	{{- if $column.IsEnum }}
-
-	{{- $enum_name := printf "%s%s" $.Table.Name $column.Name -}}
-// Enum{{ printf "%v" $column.Elems}}
-type {{ $enum_name }} struct {
-	val   string
-	valid bool   // Valid is true if Val is not NULL
-}
-
-func check{{ $enum_name }}Value(s string) bool {
-	switch s {
-{{- range $i, $elem := $column.Elems }}
-	case {{ printf "%+q" $elem }}:
-		return true
-{{- end }}
-	default:
-		return false
-	}
-}
-
-// Create {{ $enum_name }}.
-func New{{ $enum_name }}(s string) {{ $enum_name }} {
-	if !check{{ $enum_name }}Value(s) {
-		return {{ $enum_name }}{}
-	}
-	return {{ $enum_name }}{
-		val: s,
-		valid: true,
-	}
-}
-
-// As string.
-func (e {{ $enum_name }}) String() string {
-	return e.val
-}
-
-// NULL if not valid.
-func (e {{ $enum_name }}) Valid() bool {
-	return e.valid
-}
-
-// Scan implements the Scanner interface.
-func (e *{{ $enum_name }}) Scan(value interface{}) error {
-	if value == nil {
-		e.val  = ""
-		e.valid = false
-		return nil
-	}
-
-	var s string
-	switch value.(type) {
-	case []byte:
-		s = string(value.([]byte))
-	case string:
-		s = value.(string)
-	default:
-		return {{ $fmt }}.Errorf("Expect string/[]byte to scan Enum {{ printf "%s" $enum_name }} but got %T", value)
-	}
-
-	if !check{{ $enum_name }}Value(s) {
-		return {{ $fmt }}.Errorf("Invalid enum value %+q for {{ printf "%s" $enum_name }}", s)
-	}
-	e.val = s
-	e.valid = true
-	return nil
-}
-
-// Value implements the driver Valuer interface.
-func (e {{ $enum_name }}) Value() (driver.Value, error) {
-	if !e.valid {
-		return nil, nil
-	}
-	return e.val, nil
-}
-
-	{{- else if $column.IsSet }}
-
-	{{/* TODO */}}
-
-	{{- end -}}
-{{ end }}
-
-{{/* declare some common vars */}}
+{{/* =========================== */}}
+{{/*          declares           */}}
+{{/* =========================== */}}
 {{- $table_name := .Table.Name.O -}}
 {{- $struct_name := .Table.Name -}}
 {{- $cols := .Table.Columns -}}
@@ -104,6 +24,77 @@ func (e {{ $enum_name }}) Value() (driver.Value, error) {
 {{- $primary_cols := .Table.PrimaryColumns -}}
 {{- $non_primary_cols := .Table.NonPrimaryColumns -}}
 
+{{/* =========================== */}}
+{{/*          enum and set       */}}
+{{/* =========================== */}}
+{{ range $i, $col := $cols }}
+	{{- if $col.IsEnum }}
+	{{- $enum_name := printf "%s%s" $struct_name $col.Name -}}
+
+// Enum {{ $enum_name }}.
+type {{ $enum_name }} int
+
+const (
+	// NULL value.
+	{{ $enum_name }}NULL = {{ $enum_name }}(0)
+{{- range $i, $elem := $col.Elems }}
+	// {{ printf "%+q" $elem }}
+	{{ $enum_name }}{{ if eq (len $elem) 0 }}Empty_{{ else }}{{ pascal $elem }}{{ end }} = {{ $enum_name }}({{ $i }} + 1)
+{{- end }}
+)
+
+func (e {{ $enum_name }}) String() string {
+	switch e {
+{{- range $i, $elem := $col.Elems }}
+{{- if ne (len $elem) 0 }}
+	case {{ $enum_name }}{{ pascal $elem }}:
+		return {{ printf "%+q" $elem }}
+{{- end }}
+{{- end }}
+	}
+	return ""
+}
+
+func (e {{ $enum_name }}) Valid() bool {
+	return int(e) > 0 && int(e) <= {{ printf "%d" (len $col.Elems) }}
+}
+
+// Scan implements the Scanner interface.
+func (e *{{ $enum_name }}) Scan(value interface{}) error {
+	if value == nil {
+		*e = {{ $enum_name }}NULL
+		return nil
+	}
+
+	switch s := string(value.([]byte)); s {
+{{- range $i, $elem := $col.Elems }}
+	case {{ printf "%+q" $elem }}:
+		*e = {{ $enum_name }}{{ if eq (len $elem) 0 }}Empty_{{ else }}{{ pascal $elem }}{{ end }}
+{{- end }}
+	default:
+		return {{ $fmt }}.Errorf("Unexpected value for {{ $enum_name }}: %+q", s)
+	}
+
+	return nil
+}
+
+// Value implements the driver Valuer interface.
+func (e {{ $enum_name }}) Value() (driver.Value, error) {
+	if !e.Valid() {
+		return nil, nil
+	}
+	return e.String(), nil
+}
+
+	{{- else if $col.IsSet }}
+
+	{{- end -}}
+{{ end }}
+
+
+{{/* =========================== */}}
+{{/*          main struct        */}}
+{{/* =========================== */}}
 // Table {{ $table_name }}
 type {{ $struct_name }} struct {
 {{ range $i, $col := $cols }}
@@ -138,10 +129,26 @@ func (entry_ *{{ $struct_name }}) Insert(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 
 {{ if ne (len $primary_cols) 0 -}}
 
+func (entry_ *{{ $struct_name }}) Select(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
+	const sql_ = "SELECT {{ printf "%s" (column_name_list $cols) }} FROM {{ $table_name }} " +
+		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }} LIMIT 2"
+
+	row_, err_ := tx_.QueryRowContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
+	if err_ != nil {
+		return err_
+	}
+	
+	if err_ := row_.Scan({{ range $i, $col := $cols }}{{ if ne $i 0 }}, {{ end }}&entry_.{{ $col.Name }}{{ end }}); err_ != nil {
+		return err_
+	}
+
+	return nil
+}
+
 {{ if ne (len $non_primary_cols) 0 -}}
 func (entry_ *{{ $struct_name }}) Update(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
 	const sql_ = "UPDATE {{ $table_name }} SET {{ range $i, $col := $non_primary_cols }}{{ if ne $i 0 }}, {{ end }}{{ $col.Name.O }}={{ placeholder }}{{ end }}" +
-		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }}"
+		" WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }}"
 
 	res_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $non_primary_cols }}, entry_.{{ $col.Name }}{{ end }}{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
 	if err_ != nil {
@@ -149,43 +156,22 @@ func (entry_ *{{ $struct_name }}) Update(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 	}
 
 	return nil
-
 }
 {{ end }}
 
-func {{ $struct_name }}ByPrimaryKey(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx{{ range $i, $col := $primary_cols }}, {{ $col.Name.CamelCase }} {{ $col.Type }}{{ end }}) (*{{ $struct_name }}, error) {
-	const sql_ = "SELECT {{ printf "%s" (column_name_list $cols) }} FROM {{ $table_name }} " +
-		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }} LIMIT 2"
+func (entry_ *{{ $struct_name }}) Delete(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
+	const sql_ = "DELETE FROM {{ $table_name }} " +
+		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }}"
 
-	rows_, err_ := tx_.QueryContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, {{ $col.Name.CamelCase }}{{ end }})
+	res_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
 	if err_ != nil {
-		return nil, err_
-	}
-	defer rows_.Close()
-
-	ret_ := {{ $struct_name }}{}
-	cnt_ := 0
-	for rows_.Next() {
-		cnt_ += 1
-		if cnt_ >= 2 {
-			return nil, {{ $fmt }}.Errorf("{{ $struct_name }}ByPrimaryKey returns more than one entry.")
-		}
-		if err_ := rows_.Scan({{ range $i, $col := $cols }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $col.Name }}{{ end }}); err_ != nil {
-			return nil, err_
-		}
+		return err_
 	}
 
-	if err_ := rows_.Err(); err_ != nil {
-		return nil, err_
-	}
-
-	if cnt_ == 0 {
-		return nil, nil
-	}
-
-	return &ret_, nil
+	return nil
 }
-{{ end -}}
+
+{{ end }}
 
 `
 	RegistDefaultTypeTemplate((*context.TableData)(nil), t)
