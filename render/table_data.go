@@ -13,6 +13,7 @@ func init() {
 {{- $fmt := imp "fmt" -}}
 {{- $sql := imp "database/sql" -}}
 {{- $driver := imp "database/sql/driver" -}}
+{{- $strings := imp "strings" -}}
 
 {{/* =========================== */}}
 {{/*          declares           */}}
@@ -24,12 +25,12 @@ func init() {
 {{- $primary_cols := .Table.PrimaryColumns -}}
 {{- $non_primary_cols := .Table.NonPrimaryColumns -}}
 
-{{/* =========================== */}}
-{{/*          enum and set       */}}
-{{/* =========================== */}}
 {{ range $i, $col := $cols }}
 	{{- if $col.IsEnum }}
-	{{- $enum_name := printf "%s%s" $struct_name $col.Name -}}
+{{/* =========================== */}}
+{{/*          enum               */}}
+{{/* =========================== */}}
+{{- $enum_name := printf "%s%s" $struct_name $col.Name -}}
 
 // Enum {{ $enum_name }}.
 type {{ $enum_name }} int
@@ -59,7 +60,7 @@ func (e {{ $enum_name }}) Valid() bool {
 	return int(e) > 0 && int(e) <= {{ printf "%d" (len $col.Elems) }}
 }
 
-// Scan implements the Scanner interface.
+// Scan implements database/sql.Scanner interface.
 func (e *{{ $enum_name }}) Scan(value interface{}) error {
 	if value == nil {
 		*e = {{ $enum_name }}NULL
@@ -78,7 +79,7 @@ func (e *{{ $enum_name }}) Scan(value interface{}) error {
 	return nil
 }
 
-// Value implements the driver Valuer interface.
+// Value implements database/sql/driver.Valuer interface.
 func (e {{ $enum_name }}) Value() (driver.Value, error) {
 	if !e.Valid() {
 		return nil, nil
@@ -87,6 +88,93 @@ func (e {{ $enum_name }}) Value() (driver.Value, error) {
 }
 
 	{{- else if $col.IsSet }}
+{{/* =========================== */}}
+{{/*          set                */}}
+{{/* =========================== */}}
+{{- $set_name := printf "%s%s" $struct_name $col.Name -}}
+
+// Set {{ $set_name }}.
+type {{ $set_name }} struct {
+	val uint64 // Up to 64 distinct members. See https://dev.mysql.com/doc/refman/5.7/en/set.html
+	valid bool // NULL if valid is false.
+}
+
+const (
+{{- range $i, $elem := $col.Elems }}
+	// {{ printf "%+q" $elem }}
+	{{ $set_name }}{{ if eq (len $elem) 0 }}Empty_{{ else }}{{ pascal $elem }}{{ end }} uint64 = 1<<{{ $i }}
+{{- end }}
+)
+
+func New{{ $set_name }}(items ...uint64) {{ $set_name }} {
+	var val uint64 = 0
+	for _, item := range items {
+		if item > 0 && (item & (item - 1)) == 0 && item < (1 << {{ len $col.Elems }}) {
+			val |= item 
+		}
+	}
+	return {{ $set_name }}{
+		val: val,
+		valid: true,
+	}
+}
+
+func (s {{ $set_name }}) String() string {
+	parts := make([]string, 0)
+{{- range $i, $elem := $col.Elems }}
+{{- if eq (len $elem) 0 }}
+	if s.val & {{ $set_name }}Empty_ != 0 {
+		parts = append(parts, {{ printf "%+q" $elem }})
+	}
+{{- else }}
+	if s.val & {{ $set_name }}{{ pascal $elem }} != 0 {
+		parts = append(parts, {{ printf "%+q" $elem }})
+	}
+{{- end }}
+{{- end }}
+	return strings.Join(parts, ",")
+}
+
+func (s {{ $set_name }}) Valid() bool {
+	return s.valid
+}
+
+// Scan implements database/sql.Scanner interface.
+func (s *{{ $set_name }}) Scan(value interface{}) error {
+	if value == nil {
+		s.val = 0
+		s.valid = false
+		return nil
+	}
+
+	var val uint64 = 0
+	for _, part := range {{ $strings }}.Split(string(value.([]byte)), ",") {
+		switch part {
+{{- range $i, $elem := $col.Elems }}
+		case {{ printf "%+q" $elem }}:
+{{- if eq (len $elem) 0 }}
+			val |= {{ $set_name }}Empty_
+{{- else }}
+			val |= {{ $set_name }}{{ pascal $elem }}
+{{- end }}
+{{- end }}
+		default:
+			return {{ $fmt }}.Errorf("Unexpected value for {{ $set_name }}: %+q", part)
+		}
+	}
+
+	s.val = val
+	s.valid = true
+	return nil
+}
+
+// Value implements database/sql/driver.Valuer interface.
+func (s {{ $set_name }}) Value() (driver.Value, error) {
+	if !s.Valid() {
+		return nil, nil
+	}
+	return s.String(), nil
+}
 
 	{{- end -}}
 {{ end }}
