@@ -5,114 +5,115 @@ import (
 	"github.com/huangjunwen/JustSQL/utils"
 	"github.com/pingcap/tidb/model"
 	"github.com/pingcap/tidb/mysql"
+	"github.com/pingcap/tidb/util/types"
 )
 
-// This file contains xxxData types. They are used to store extracted
-// meta data from tidb model.xxxInfo.
+// This file contains xxxMeta types. They are used to store extracted
+// meta information from tidb model.xxxInfo.
 
-// DBData contains meta data of a database.
-type DBData struct {
+// DBMeta contains meta information of a database.
+type DBMeta struct {
 	*model.DBInfo
 
 	Name   utils.Str
-	Tables map[string]*TableData
+	Tables map[string]*TableMeta
 }
 
-func NewDBData(ctx *Context, dbinfo *model.DBInfo) (*DBData, error) {
-	ret := &DBData{
-		DBInfo: dbinfo,
-		Name:   utils.NewStrFromCIStr(dbinfo.Name),
-		Tables: make(map[string]*TableData),
+func NewDBMeta(ctx *Context, db_info *model.DBInfo) (*DBMeta, error) {
+	ret := &DBMeta{
+		DBInfo: db_info,
+		Name:   utils.NewStrFromCIStr(db_info.Name),
+		Tables: make(map[string]*TableMeta),
 	}
-	for _, tableinfo := range dbinfo.Tables {
-		tabledata, err := NewTableData(ctx, tableinfo)
+	for _, table_info := range db_info.Tables {
+		table_meta, err := NewTableMeta(ctx, table_info)
 		if err != nil {
 			return nil, err
 		}
-		ret.Tables[tabledata.Name.O] = tabledata
+		ret.Tables[table_meta.Name.O] = table_meta
 	}
 	return ret, nil
 }
 
-// TableData contains meta data of a table.
-type TableData struct {
+// TableMeta contains meta information of a table.
+type TableMeta struct {
 	*model.TableInfo
 
 	Name        utils.Str
-	Columns     []*ColumnData
-	Indices     []*IndexData
-	ForeignKeys []*FKData
+	Columns     []*ColumnMeta
+	Indices     []*IndexMeta
+	ForeignKeys []*FKMeta
 
 	// Shortcut
-	primaryIndex  *IndexData
-	autoIncColumn *ColumnData
+	primaryIndex  *IndexMeta
+	autoIncColumn *ColumnMeta
 
 	// column name -> column index
-	columnByName map[string]*ColumnData
+	columnByName map[string]*ColumnMeta
 }
 
-func NewTableData(ctx *Context, tableinfo *model.TableInfo) (*TableData, error) {
-	ret := &TableData{
-		TableInfo:    tableinfo,
-		Name:         utils.NewStrFromCIStr(tableinfo.Name),
-		Columns:      make([]*ColumnData, 0, len(tableinfo.Columns)),
-		Indices:      make([]*IndexData, 0, len(tableinfo.Indices)),
-		ForeignKeys:  make([]*FKData, 0, len(tableinfo.ForeignKeys)),
-		columnByName: make(map[string]*ColumnData),
+func NewTableMeta(ctx *Context, table_info *model.TableInfo) (*TableMeta, error) {
+	ret := &TableMeta{
+		TableInfo:    table_info,
+		Name:         utils.NewStrFromCIStr(table_info.Name),
+		Columns:      make([]*ColumnMeta, 0, len(table_info.Columns)),
+		Indices:      make([]*IndexMeta, 0, len(table_info.Indices)),
+		ForeignKeys:  make([]*FKMeta, 0, len(table_info.ForeignKeys)),
+		columnByName: make(map[string]*ColumnMeta),
 	}
 
-	for _, columninfo := range tableinfo.Columns {
-		columndata, err := NewColumnData(ctx, columninfo)
+	for _, column_info := range table_info.Columns {
+		column_meta, err := NewColumnMeta(ctx, column_info)
 		if err != nil {
 			return nil, err
 		}
-		ret.Columns = append(ret.Columns, columndata)
-		ret.columnByName[columndata.Name.O] = columndata
+		ret.Columns = append(ret.Columns, column_meta)
+		ret.columnByName[column_meta.Name.O] = column_meta
 
-		if columndata.IsAutoIncrement {
+		if column_meta.IsAutoInc {
 			if ret.autoIncColumn != nil {
 				panic(fmt.Errorf("Multiple auto increment columns found in table %q", ret.Name.O))
 			}
-			ret.autoIncColumn = columndata
+			ret.autoIncColumn = column_meta
 		}
 	}
 
-	if indexdata := NewIndexDataFromPKHandler(ctx, tableinfo); indexdata != nil {
-		ret.Indices = append(ret.Indices, indexdata)
-		ret.primaryIndex = indexdata
+	if index_meta := NewIndexMetaFromPKHandler(ctx, table_info); index_meta != nil {
+		ret.Indices = append(ret.Indices, index_meta)
+		ret.primaryIndex = index_meta
 	}
 
-	for _, indexinfo := range tableinfo.Indices {
-		indexdata, err := NewIndexData(ctx, indexinfo)
+	for _, index_info := range table_info.Indices {
+		index_meta, err := NewIndexMeta(ctx, index_info)
 		if err != nil {
 			return nil, err
 		}
-		ret.Indices = append(ret.Indices, indexdata)
-		if indexdata.Primary {
+		ret.Indices = append(ret.Indices, index_meta)
+		if index_meta.Primary {
 			if ret.primaryIndex != nil {
 				panic(fmt.Errorf("Multiple primary index found in table %q", ret.Name.O))
 			}
-			ret.primaryIndex = indexdata
+			ret.primaryIndex = index_meta
 		}
 	}
 
-	for _, fkinfo := range tableinfo.ForeignKeys {
-		fkdata, err := NewFKData(ctx, fkinfo)
+	for _, fk_info := range table_info.ForeignKeys {
+		fk_meta, err := NewFKMeta(ctx, fk_info)
 		if err != nil {
 			return nil, err
 		}
-		ret.ForeignKeys = append(ret.ForeignKeys, fkdata)
+		ret.ForeignKeys = append(ret.ForeignKeys, fk_meta)
 	}
 
 	return ret, nil
 }
 
 // Return primary key columns if exists.
-func (t *TableData) PrimaryColumns() []*ColumnData {
+func (t *TableMeta) PrimaryColumns() []*ColumnMeta {
 	if t.primaryIndex == nil {
 		return nil
 	}
-	ret := make([]*ColumnData, 0, len(t.primaryIndex.ColumnIndices))
+	ret := make([]*ColumnMeta, 0, len(t.primaryIndex.ColumnIndices))
 	for _, col_idx := range t.primaryIndex.ColumnIndices {
 		ret = append(ret, t.Columns[col_idx])
 	}
@@ -120,7 +121,7 @@ func (t *TableData) PrimaryColumns() []*ColumnData {
 }
 
 // Return non-primary columns if exists.
-func (t *TableData) NonPrimaryColumns() []*ColumnData {
+func (t *TableMeta) NonPrimaryColumns() []*ColumnMeta {
 	if t.primaryIndex == nil {
 		return t.Columns
 	}
@@ -129,7 +130,7 @@ func (t *TableData) NonPrimaryColumns() []*ColumnData {
 		is_primary[col_idx] = true
 	}
 
-	ret := make([]*ColumnData, 0, len(t.Columns)-len(t.primaryIndex.ColumnIndices))
+	ret := make([]*ColumnMeta, 0, len(t.Columns)-len(t.primaryIndex.ColumnIndices))
 	for i, b := range is_primary {
 		if b {
 			continue
@@ -141,12 +142,12 @@ func (t *TableData) NonPrimaryColumns() []*ColumnData {
 }
 
 // Return auto increment column if exists.
-func (t *TableData) AutoIncColumn() *ColumnData {
+func (t *TableMeta) AutoIncColumn() *ColumnMeta {
 	return t.autoIncColumn
 }
 
 // Retrive column by its name.
-func (t *TableData) ColumnByName(name string) *ColumnData {
+func (t *TableMeta) ColumnByName(name string) *ColumnMeta {
 	ret, ok := t.columnByName[name]
 	if !ok {
 		return nil
@@ -154,14 +155,15 @@ func (t *TableData) ColumnByName(name string) *ColumnData {
 	return ret
 }
 
-// ColumnData contains meta data of a column.
-type ColumnData struct {
+// ColumnMeta contains meta data of a column.
+type ColumnMeta struct {
 	*model.ColumnInfo
 
 	Name   utils.Str
 	Offset int
 
-	Type *TypeName
+	// Column field type.
+	Type types.FieldType
 
 	// Is it enum/set type?
 	IsEnum bool
@@ -171,47 +173,51 @@ type ColumnData struct {
 	Elems []string
 
 	// Flags of this column
-	IsNotNULL       bool
-	IsAutoIncrement bool
-	IsOnUpdateNow   bool
+	IsNotNULL     bool
+	IsAutoInc     bool
+	IsOnUpdateNow bool
 
 	DefaultValue interface{}
+
+	// Go type to store this field.
+	AdaptType *TypeName
 }
 
-func NewColumnData(ctx *Context, columninfo *model.ColumnInfo) (*ColumnData, error) {
-	ret := &ColumnData{
-		ColumnInfo: columninfo,
-		Name:       utils.NewStrFromCIStr(columninfo.Name),
-		Offset:     columninfo.Offset,
+func NewColumnMeta(ctx *Context, column_info *model.ColumnInfo) (*ColumnMeta, error) {
+	ret := &ColumnMeta{
+		ColumnInfo: column_info,
+		Name:       utils.NewStrFromCIStr(column_info.Name),
+		Offset:     column_info.Offset,
+		Type:       column_info.FieldType,
 	}
 
-	ft := &columninfo.FieldType
+	tp := &ret.Type
 
-	tp, err := ctx.TypeContext.AdaptType(ft)
+	adapt_tp, err := ctx.TypeContext.AdaptType(tp)
 	if err != nil {
 		return nil, err
 	}
-	ret.Type = tp
+	ret.AdaptType = adapt_tp
 
-	if columninfo.FieldType.Tp == mysql.TypeEnum {
+	if tp.Tp == mysql.TypeEnum {
 		ret.IsEnum = true
-		ret.Elems = columninfo.FieldType.Elems
-	} else if columninfo.FieldType.Tp == mysql.TypeSet {
+		ret.Elems = tp.Elems
+	} else if tp.Tp == mysql.TypeSet {
 		ret.IsSet = true
-		ret.Elems = columninfo.FieldType.Elems
+		ret.Elems = tp.Elems
 	}
 
 	ret.IsNotNULL = mysql.HasNotNullFlag(ft.Flag)
-	ret.IsAutoIncrement = mysql.HasAutoIncrementFlag(ft.Flag)
+	ret.IsAutoInc = mysql.HasAutoIncrementFlag(ft.Flag)
 	ret.IsOnUpdateNow = mysql.HasOnUpdateNowFlag(ft.Flag)
 
-	ret.DefaultValue = columninfo.DefaultValue
+	ret.DefaultValue = column_info.DefaultValue
 
 	return ret, nil
 }
 
-// IndexData contains meta data of an index.
-type IndexData struct {
+// IndexMeta contains meta data of an index.
+type IndexMeta struct {
 	*model.IndexInfo
 
 	Name          utils.Str
@@ -220,36 +226,36 @@ type IndexData struct {
 	ColumnIndices []int
 }
 
-func NewIndexData(ctx *Context, indexinfo *model.IndexInfo) (*IndexData, error) {
-	ret := &IndexData{
-		IndexInfo:     indexinfo,
-		Name:          utils.NewStrFromCIStr(indexinfo.Name),
-		Unique:        indexinfo.Unique,
-		Primary:       indexinfo.Primary,
-		ColumnIndices: make([]int, 0, len(indexinfo.Columns)),
+func NewIndexMeta(ctx *Context, index_info *model.IndexInfo) (*IndexMeta, error) {
+	ret := &IndexMeta{
+		IndexInfo:     index_info,
+		Name:          utils.NewStrFromCIStr(index_info.Name),
+		Unique:        index_info.Unique,
+		Primary:       index_info.Primary,
+		ColumnIndices: make([]int, 0, len(index_info.Columns)),
 	}
-	for _, column := range indexinfo.Columns {
+	for _, column := range index_info.Columns {
 		ret.ColumnIndices = append(ret.ColumnIndices, column.Offset)
 	}
 	return ret, nil
 }
 
 // see: https://github.com/pingcap/tidb/issues/3746
-func NewIndexDataFromPKHandler(ctx *Context, tableinfo *model.TableInfo) *IndexData {
-	if !tableinfo.PKIsHandle {
+func NewIndexMetaFromPKHandler(ctx *Context, table_info *model.TableInfo) *IndexMeta {
+	if !table_info.PKIsHandle {
 		return nil
 	}
-	columninfo := tableinfo.GetPkColInfo()
-	return &IndexData{
-		Name:          utils.NewStr("PRIMARY"),
+	column_info := table_info.GetPkColInfo()
+	return &IndexMeta{
+		Name:          utils.NewStr("Primary"),
 		Unique:        true,
 		Primary:       true,
-		ColumnIndices: []int{columninfo.Offset},
+		ColumnIndices: []int{column_info.Offset},
 	}
 }
 
-// FKData contains meta data of a foreign key.
-type FKData struct {
+// FKMeta contains meta data of a foreign key.
+type FKMeta struct {
 	*model.FKInfo
 
 	Name         utils.Str
@@ -258,17 +264,17 @@ type FKData struct {
 	RefColNames  []string
 }
 
-func NewFKData(ctx *Context, fkinfo *model.FKInfo) (*FKData, error) {
-	ret := &FKData{
-		FKInfo:       fkinfo,
-		ColNames:     make([]string, 0, len(fkinfo.Cols)),
-		RefTableName: fkinfo.RefTable.O,
-		RefColNames:  make([]string, 0, len(fkinfo.RefCols)),
+func NewFKMeta(ctx *Context, fk_info *model.FKInfo) (*FKMeta, error) {
+	ret := &FKMeta{
+		FKInfo:       fk_info,
+		ColNames:     make([]string, 0, len(fk_info.Cols)),
+		RefTableName: fk_info.RefTable.O,
+		RefColNames:  make([]string, 0, len(fk_info.RefCols)),
 	}
-	for _, col := range fkinfo.Cols {
+	for _, col := range fk_info.Cols {
 		ret.ColNames = append(ret.ColNames, col.O)
 	}
-	for _, refcol := range fkinfo.RefCols {
+	for _, refcol := range fk_info.RefCols {
 		ret.RefColNames = append(ret.RefColNames, refcol.O)
 	}
 	return ret, nil
