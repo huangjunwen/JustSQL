@@ -21,7 +21,7 @@ type Context struct {
 	*TypeContext
 
 	// Extracted meta data.
-	dbData *DBData
+	*DBMeta
 }
 
 func NewContext(db_store_path, default_db string) (*Context, error) {
@@ -45,29 +45,19 @@ func NewContext(db_store_path, default_db string) (*Context, error) {
 
 }
 
-func (ctx *Context) DBData() (*DBData, error) {
-	if ctx.dbData == nil {
-		err := ctx.RebuildDBData()
-		if err != nil {
-			return nil, err
-		}
-	}
-	return ctx.dbData, nil
-}
-
-func (ctx *Context) RebuildDBData() error {
+// Extract database meta information into context.
+func (ctx *Context) ExtractDBMeta() error {
 	is := ctx.DB.Domain().InfoSchema()
-	dbinfo, ok := is.SchemaByName(model.NewCIStr(ctx.DefaultDB))
+	db_info, ok := is.SchemaByName(model.NewCIStr(ctx.DefaultDB))
 	if !ok {
 		return fmt.Errorf("Can't get DBInfo of %q", ctx.DefaultDB)
 	}
 
-	dbdata, err := NewDBData(ctx, dbinfo)
+	db_meta, err := NewDBMeta(ctx, db_info)
 	if err != nil {
 		return err
 	}
+	ctx.DBMeta = db_meta
 
-	ctx.dbData = dbdata
 	return nil
-
 }

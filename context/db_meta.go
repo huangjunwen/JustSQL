@@ -207,9 +207,9 @@ func NewColumnMeta(ctx *Context, column_info *model.ColumnInfo) (*ColumnMeta, er
 		ret.Elems = tp.Elems
 	}
 
-	ret.IsNotNULL = mysql.HasNotNullFlag(ft.Flag)
-	ret.IsAutoInc = mysql.HasAutoIncrementFlag(ft.Flag)
-	ret.IsOnUpdateNow = mysql.HasOnUpdateNowFlag(ft.Flag)
+	ret.IsNotNULL = mysql.HasNotNullFlag(tp.Flag)
+	ret.IsAutoInc = mysql.HasAutoIncrementFlag(tp.Flag)
+	ret.IsOnUpdateNow = mysql.HasOnUpdateNowFlag(tp.Flag)
 
 	ret.DefaultValue = column_info.DefaultValue
 
