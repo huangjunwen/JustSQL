@@ -6,7 +6,7 @@ import (
 	"reflect"
 )
 
-// Handler takes context and an object (TableInfo/SelectStmt...) as
+// Handler takes context and an object (TableMeta/SelectStmt...) as
 // parameters, returns an object (the 'dot' object) for template renderring.
 type Handler func(*context.Context, interface{}) (interface{}, error)
 

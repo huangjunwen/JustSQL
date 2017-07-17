@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	DEFAULT_DB = "justsql"
+	DEFAULT_DB_NAME = "justsql"
 )
 
 // Runtime context.
@@ -14,50 +14,59 @@ type Context struct {
 	// The embeded db.
 	DB *EmbedDB
 
-	// Default db name.
-	DefaultDB string
+	// Database name. Currently JustSQL only support single database.
+	DBName string
+
+	// Extracted meta data.
+	dbMeta *DBMeta
 
 	// Type things.
 	*TypeContext
-
-	// Extracted meta data.
-	*DBMeta
 }
 
-func NewContext(db_store_path, default_db string) (*Context, error) {
+func NewContext(db_store_path, db_name string) (*Context, error) {
 	db, err := NewEmbedDB(db_store_path)
 	if err != nil {
 		return nil, err
 	}
 
-	if default_db == "" {
-		default_db = DEFAULT_DB
+	if db_name == "" {
+		db_name = DEFAULT_DB_NAME
 	}
-	db.MustExecute(fmt.Sprintf("DROP DATABASE IF EXISTS %s", default_db))
-	db.MustExecute(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", default_db))
-	db.MustExecute(fmt.Sprintf("USE %s", default_db))
+	db.MustExecute(fmt.Sprintf("DROP DATABASE IF EXISTS %s", db_name))
+	db.MustExecute(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", db_name))
+	db.MustExecute(fmt.Sprintf("USE %s", db_name))
 
 	return &Context{
 		DB:          db,
-		DefaultDB:   default_db,
+		DBName:      db_name,
 		TypeContext: NewTypeContext(),
 	}, nil
 
 }
 
+func (ctx *Context) DBMeta() (*DBMeta, error) {
+	if ctx.dbMeta == nil {
+		if err := ctx.ExtractDBMeta(); err != nil {
+			return nil, err
+		}
+	}
+	return ctx.dbMeta, nil
+}
+
 // Extract database meta information into context.
 func (ctx *Context) ExtractDBMeta() error {
 	is := ctx.DB.Domain().InfoSchema()
-	db_info, ok := is.SchemaByName(model.NewCIStr(ctx.DefaultDB))
+	db_info, ok := is.SchemaByName(model.NewCIStr(ctx.DBName))
 	if !ok {
-		return fmt.Errorf("Can't get DBInfo of %q", ctx.DefaultDB)
+		return fmt.Errorf("Can't get DBInfo of %q", ctx.DBName)
 	}
 
 	db_meta, err := NewDBMeta(ctx, db_info)
 	if err != nil {
 		return err
 	}
-	ctx.DBMeta = db_meta
 
+	ctx.dbMeta = db_meta
 	return nil
 }

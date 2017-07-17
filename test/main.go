@@ -94,9 +94,9 @@ func main() {
 	loadDDL(ctx)
 	log.Printf("DDL loaded\n")
 
-	dbdata, err := ctx.DBData()
+	db_meta, err := ctx.DBMeta()
 	if err != nil {
-		log.Fatalf("ctx.DBData: %s", err)
+		log.Fatalf("ctx.DBMeta: %s", err)
 	}
 
 	// XXX: Test name conflict
@@ -105,8 +105,8 @@ func main() {
 	var all, body bytes.Buffer
 	ri := render.NewRenderInfo(ctx)
 
-	for _, table_data := range dbdata.Tables {
-		err := ri.Run(table_data, &body)
+	for _, table_meta := range db_meta.Tables {
+		err := ri.Run(table_meta, &body)
 		if err != nil {
 			log.Fatalf("render.Render: %s", err)
 		}

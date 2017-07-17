@@ -40,17 +40,15 @@ const (
 	{{ $enum_name }}NULL = {{ $enum_name }}(0)
 {{- range $i, $elem := $col.Elems }}
 	// {{ printf "%+q" $elem }}
-	{{ $enum_name }}{{ if eq (len $elem) 0 }}Empty_{{ else }}{{ pascal $elem }}{{ end }} = {{ $enum_name }}({{ $i }} + 1)
+	{{ $enum_name }}{{ pascal $elem }} = {{ $enum_name }}({{ $i }} + 1)
 {{- end }}
 )
 
 func (e {{ $enum_name }}) String() string {
 	switch e {
 {{- range $i, $elem := $col.Elems }}
-{{- if ne (len $elem) 0 }}
 	case {{ $enum_name }}{{ pascal $elem }}:
 		return {{ printf "%+q" $elem }}
-{{- end }}
 {{- end }}
 	}
 	return ""
@@ -70,7 +68,7 @@ func (e *{{ $enum_name }}) Scan(value interface{}) error {
 	switch s := string(value.([]byte)); s {
 {{- range $i, $elem := $col.Elems }}
 	case {{ printf "%+q" $elem }}:
-		*e = {{ $enum_name }}{{ if eq (len $elem) 0 }}Empty_{{ else }}{{ pascal $elem }}{{ end }}
+		*e = {{ $enum_name }}{{ pascal $elem }}
 {{- end }}
 	default:
 		return {{ $fmt }}.Errorf("Unexpected value for {{ $enum_name }}: %+q", s)
@@ -102,7 +100,7 @@ type {{ $set_name }} struct {
 const (
 {{- range $i, $elem := $col.Elems }}
 	// {{ printf "%+q" $elem }}
-	{{ $set_name }}{{ if eq (len $elem) 0 }}Empty_{{ else }}{{ pascal $elem }}{{ end }} uint64 = 1<<{{ $i }}
+	{{ $set_name }}{{ pascal $elem }} = uint64(1<<{{ $i }})
 {{- end }}
 )
 
@@ -122,15 +120,9 @@ func New{{ $set_name }}(items ...uint64) {{ $set_name }} {
 func (s {{ $set_name }}) String() string {
 	parts := make([]string, 0)
 {{- range $i, $elem := $col.Elems }}
-{{- if eq (len $elem) 0 }}
-	if s.val & {{ $set_name }}Empty_ != 0 {
-		parts = append(parts, {{ printf "%+q" $elem }})
-	}
-{{- else }}
 	if s.val & {{ $set_name }}{{ pascal $elem }} != 0 {
 		parts = append(parts, {{ printf "%+q" $elem }})
 	}
-{{- end }}
 {{- end }}
 	return strings.Join(parts, ",")
 }
@@ -152,11 +144,7 @@ func (s *{{ $set_name }}) Scan(value interface{}) error {
 		switch part {
 {{- range $i, $elem := $col.Elems }}
 		case {{ printf "%+q" $elem }}:
-{{- if eq (len $elem) 0 }}
-			val |= {{ $set_name }}Empty_
-{{- else }}
 			val |= {{ $set_name }}{{ pascal $elem }}
-{{- end }}
 {{- end }}
 		default:
 			return {{ $fmt }}.Errorf("Unexpected value for {{ $set_name }}: %+q", part)
@@ -189,9 +177,9 @@ type {{ $struct_name }} struct {
 	{{- if or $col.IsEnum $col.IsSet }}
 	{{ $col.Name }} {{ $struct_name }}{{ $col.Name }}
 	{{- else }}
-	{{ $col.Name }} {{ $col.Type }}
+	{{ $col.Name }} {{ $col.AdaptType }}
 	{{- end -}}
-	{{- " " -}}// {{ $col.Name.O }}: {{ if $col.IsNotNULL }}NOT NULL;{{ else }}NULL;{{ end }}{{ if $col.IsAutoIncrement }} AUTO INCREMENT;{{ end }} DEFAULT {{ printf "%#v" $col.DefaultValue }};{{ if $col.IsOnUpdateNow }} ON UPDATE "CURRENT_TIMESTAMP";{{ end }}
+	{{- " " -}}// {{ $col.Name.O }}: {{ if $col.IsNotNULL }}NOT NULL;{{ else }}NULL;{{ end }}{{ if $col.IsAutoInc }} AUTO INCREMENT;{{ end }} DEFAULT {{ printf "%#v" $col.DefaultValue }};{{ if $col.IsOnUpdateNow }} ON UPDATE "CURRENT_TIMESTAMP";{{ end }}
 {{- end }}
 }
 
@@ -209,7 +197,7 @@ func (entry_ *{{ $struct_name }}) Insert(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 		return err_
 	}
 
-	entry_.{{ $auto_inc_col.Name }} = {{ $auto_inc_col.Type }}(last_insert_id_)
+	entry_.{{ $auto_inc_col.Name }} = {{ $auto_inc_col.AdaptType }}(last_insert_id_)
 	{{ end -}}
 
 	return nil
@@ -219,7 +207,7 @@ func (entry_ *{{ $struct_name }}) Insert(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 
 func (entry_ *{{ $struct_name }}) Select(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
 	const sql_ = "SELECT {{ printf "%s" (column_name_list $cols) }} FROM {{ $table_name }} " +
-		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }} LIMIT 2"
+		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }}"
 
 	row_ := tx_.QueryRowContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
 	if err_ := row_.Scan({{ range $i, $col := $cols }}{{ if ne $i 0 }}, {{ end }}&entry_.{{ $col.Name }}{{ end }}); err_ != nil {
@@ -258,5 +246,5 @@ func (entry_ *{{ $struct_name }}) Delete(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 {{ end }}
 
 `
-	RegistDefaultTypeTemplate((*context.TableData)(nil), t)
+	RegistDefaultTypeTemplate((*context.TableMeta)(nil), t)
 }

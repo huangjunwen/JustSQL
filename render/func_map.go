@@ -20,7 +20,7 @@ func notNil(v interface{}) (res bool) {
 }
 
 // Return 'col1, col2, col3, ...'
-func columnNameList(cols []*context.ColumnData) string {
+func columnNameList(cols []*context.ColumnMeta) string {
 	parts := make([]string, 0, len(cols))
 	for _, col := range cols {
 		parts = append(parts, col.Name.O)
@@ -43,6 +43,16 @@ func placeholderList(n int) string {
 	return s[:len(s)-2]
 }
 
+// Convert a string to its pascal case. If the string is empty ("")
+// it will return "Empty_"
+func pascalNoEmpty(s string) string {
+	ret := utils.PascalCase(s)
+	if ret == "" {
+		return "Empty_"
+	}
+	return ret
+}
+
 func buildExtraFuncs(ctx *context.Context) template.FuncMap {
 
 	tctx := ctx.TypeContext
@@ -58,7 +68,7 @@ func buildExtraFuncs(ctx *context.Context) template.FuncMap {
 		"column_name_list": columnNameList,
 		"placeholder":      placeholder,
 		"placeholder_list": placeholderList,
-		"pascal":           utils.PascalCase,
+		"pascal":           pascalNoEmpty,
 	}
 
 }
