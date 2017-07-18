@@ -1,7 +1,6 @@
 package context
 
 import (
-	"github.com/ngaut/log"
 	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/context"
@@ -12,10 +11,6 @@ import (
 	"github.com/pingcap/tidb/plan"
 	"github.com/pingcap/tidb/sessionctx"
 )
-
-func init() {
-	log.SetLevelByString("error")
-}
 
 // Use TiDB as an embeded database to execute or parse SQLs.
 type EmbedDB struct {
