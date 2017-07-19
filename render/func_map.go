@@ -55,11 +55,10 @@ func pascalNoEmpty(s string) string {
 
 func buildExtraFuncs(ctx *context.Context) template.FuncMap {
 
-	tctx := ctx.TypeContext
+	scopes := ctx.Scopes
 
-	// Import pkg (its path) and return a unique name.
-	imp := func(pkg_path string) (string, error) {
-		return tctx.CurrScope().UsePkg(pkg_path), nil
+	imp := func(pkg_path string) *context.PkgName {
+		return scopes.CreatePkgName(pkg_path)
 	}
 
 	return template.FuncMap{

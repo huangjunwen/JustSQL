@@ -96,7 +96,6 @@ func parseOptionsAndInit() {
 	if err != nil {
 		log.Fatalf("NewContext: %s", err)
 	}
-	ctx.TypeContext.UseMySQLNullTime()
 
 	// Init render info.
 	ri = render.NewRenderInfo(ctx)
@@ -122,7 +121,7 @@ import (
 func genPackageFileHead(ctx *context.Context, w io.Writer) error {
 	return pkg_file_head_tmpl.Execute(w, map[string]interface{}{
 		"PackageName": package_name,
-		"Imports":     ctx.TypeContext.CurrScope().ListPkg(),
+		"Imports":     ctx.Scopes.CurrScope().ListPkg(),
 	})
 }
 
@@ -220,7 +219,7 @@ func exportTables() {
 		log.Infof("exportTable(%q) ...", table_meta.Name.O)
 
 		scope := fmt.Sprintf("%s.ddl.go", table_meta.Name.O)
-		ctx.TypeContext.SwitchScope(scope)
+		ctx.Scopes.SwitchScope(scope)
 
 		var body bytes.Buffer
 		if err := ri.Run(table_meta, &body); err != nil {

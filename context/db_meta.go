@@ -192,12 +192,7 @@ func NewColumnMeta(ctx *Context, column_info *model.ColumnInfo) (*ColumnMeta, er
 	}
 
 	tp := &ret.Type
-
-	adapt_tp, err := ctx.TypeContext.AdaptType(tp)
-	if err != nil {
-		return nil, err
-	}
-	ret.AdaptType = adapt_tp
+	ret.AdaptType = ctx.TypeAdapter.AdaptType(tp)
 
 	if tp.Tp == mysql.TypeEnum {
 		ret.IsEnum = true

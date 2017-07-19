@@ -14,14 +14,17 @@ type Context struct {
 	// The embeded db.
 	DB *EmbedDB
 
-	// Database name. Currently JustSQL only support single database.
+	// Database name in embeded db. Currently JustSQL only support single database.
 	DBName string
+
+	// File scopes.
+	*Scopes
+
+	// DB types and go types adpater.
+	*TypeAdapter
 
 	// Extracted meta data.
 	dbMeta *DBMeta
-
-	// Type things.
-	*TypeContext
 }
 
 func NewContext(db_store_path, db_name string) (*Context, error) {
@@ -37,10 +40,14 @@ func NewContext(db_store_path, db_name string) (*Context, error) {
 	db.MustExecute(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", db_name))
 	db.MustExecute(fmt.Sprintf("USE %s", db_name))
 
+	scopes := NewScopes()
+	type_adapter := NewTypeAdapter(scopes)
+
 	return &Context{
 		DB:          db,
 		DBName:      db_name,
-		TypeContext: NewTypeContext(),
+		Scopes:      scopes,
+		TypeAdapter: type_adapter,
 	}, nil
 
 }
