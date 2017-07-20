@@ -2,7 +2,7 @@ package annot
 
 import (
 	"fmt"
-	"github.com/huangjunwen/JustSQL/utils"
+	"reflect"
 	"regexp"
 	"strings"
 )
@@ -10,12 +10,30 @@ import (
 // Annotation is some extra information(k/v) stored in comments. Format:
 //   primaryKey[:primaryVal] key[:val] ...
 // Example:
-//   bind:name slice type:"sql.NullString"
+//   bind:name multi
 type Annot interface {
 	SetPrimary(val string) error
 	// Set non-primary key/val, if key == "", there will be no more
 	// key/val pairs.
 	Set(key, val string) error
+}
+
+// Annotation name -> Annot type
+var annot_map = make(map[string]reflect.Type)
+
+// Regist annotation. obj should be a pointer.
+func RegistAnnot(obj Annot, names ...string) {
+
+	typ := reflect.TypeOf(obj)
+	if typ.Kind() != reflect.Ptr {
+		panic(fmt.Errorf("Expect ptr value, but got %s", typ.Kind()))
+	}
+
+	typ = typ.Elem()
+	for _, name := range names {
+		annot_map[name] = typ
+	}
+
 }
 
 // Parse annotation.
@@ -29,14 +47,11 @@ func ParseAnnot(src string) (Annot, error) {
 	}
 
 	// Using primary key to choose type
-	var ret Annot
-
-	switch primary_key {
-	default:
-		return nil, fmt.Errorf("Unknown annotation type: %q", primary_key)
-	case "bind":
-		ret = &BindAnnot{}
+	typ, ok := annot_map[primary_key]
+	if !ok {
+		return nil, fmt.Errorf("Unknown annotation %+q", primary_key)
 	}
+	ret := reflect.New(typ).Interface().(Annot)
 
 	// Set primary val
 	err = ret.SetPrimary(primary_val)
@@ -114,44 +129,4 @@ func parseAnnotString(src string) func() (string, string, error) {
 		remain = remain[l:]
 		return string(k), string(v), nil
 	}
-}
-
-// Annotations
-
-// Annotation for bind param, format:
-//   bind:id type:int slice
-// where 'type' and 'slice' are optional
-type BindAnnot struct {
-	// bind param name
-	Name string
-
-	// (optinal) param type
-	Type string
-
-	// param is slice? Using in 'WHERE id IN ?'
-	Slice bool
-}
-
-func (a *BindAnnot) SetPrimary(val string) error {
-	if val == "" {
-		return fmt.Errorf("bind: missing bind name")
-	}
-	if !utils.IsIdent(val) {
-		return fmt.Errorf("bind: bind name %q is not a valid identifier", val)
-	}
-	a.Name = val
-	return nil
-}
-
-func (a *BindAnnot) Set(key, val string) error {
-	switch key {
-	default:
-		return fmt.Errorf("bind: unknown key %q", key)
-	case "type":
-		a.Type = val
-	case "slice":
-		a.Slice = true
-	case "":
-	}
-	return nil
 }

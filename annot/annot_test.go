@@ -24,15 +24,16 @@ func testAnnot(t *testing.T, src string, expect Annot, expect_err bool) {
 
 func TestParsing(t *testing.T) {
 	fmt.Println("TestParsing")
-	testAnnot(t, "bind", nil, true)
-	testAnnot(t, "bind:", nil, true)
-	testAnnot(t, "bind:*", nil, true)
-	testAnnot(t, "bind:\"a b\"", nil, true)
-	testAnnot(t, "bind:\"a\\cb\"", &BindAnnot{
+	testAnnot(t, "func", nil, true)
+	testAnnot(t, "func:", nil, true)
+	testAnnot(t, "func:*", nil, true)
+	testAnnot(t, "func:\"a b\"", nil, true)
+	testAnnot(t, "func:\"a\\cb\"", &FuncAnnot{
 		Name: "acb",
 	}, false)
 }
 
+/*
 func TestBind(t *testing.T) {
 	fmt.Println("TestBind")
 	testAnnot(t, "bind:_a", &BindAnnot{
@@ -48,3 +49,4 @@ func TestBind(t *testing.T) {
 		Slice: true,
 	}, false)
 }
+*/

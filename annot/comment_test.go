@@ -153,13 +153,13 @@ func TestStringLiteral(t *testing.T) {
 
 func TestCommentWithAnnot(t *testing.T) {
 	fmt.Println("TestCommentWithAnnot")
-	testScanComment(t, "/* $bind:param */", []Comment{
+	testScanComment(t, "/* $func:xxxxx */", []Comment{
 		Comment{
 			Offset:  0,
 			Length:  17,
-			Content: "$bind:param",
-			Annot: &BindAnnot{
-				Name: "param",
+			Content: "$func:xxxxx",
+			Annot: &FuncAnnot{
+				Name: "xxxxx",
 			},
 		},
 	}, false)
