@@ -38,6 +38,21 @@ func RegistAnnot(obj Annot, names ...string) {
 
 // Parse annotation.
 func ParseAnnot(src string) (Annot, error) {
+	// Special case for ContentAnnot
+	if len(src) <= 0 {
+		return &ContentAnnot{
+			Content: "",
+		}, nil
+	}
+
+	switch src[0] {
+	case ' ', '\t', '\n', '\r':
+		return &ContentAnnot{
+			Content: strings.TrimSpace(src),
+		}, nil
+	}
+
+	// Normal case
 	fn := parseAnnotString(src)
 
 	// The first key/val is primary key/val

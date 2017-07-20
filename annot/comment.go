@@ -9,8 +9,10 @@ import (
 type Comment struct {
 	// Offset and length in original source (including '/*' '*/' '#' '--' '\n')
 	Offset, Length int
+
 	// Stripped comment content
 	Content string
+
 	// Annotation in comment
 	Annot
 }

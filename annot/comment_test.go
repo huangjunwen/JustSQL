@@ -163,6 +163,15 @@ func TestCommentWithAnnot(t *testing.T) {
 			},
 		},
 	}, false)
-	testScanComment(t, "/* $*/", nil, true)
+	testScanComment(t, "/* $ */", []Comment{
+		Comment{
+			Offset:  0,
+			Length:  7,
+			Content: "$",
+			Annot: &ContentAnnot{
+				Content: "",
+			},
+		},
+	}, false)
 	testScanComment(t, "/* $unknown */", nil, true)
 }
