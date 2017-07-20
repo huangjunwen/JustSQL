@@ -145,15 +145,15 @@ func (scopes *Scopes) CreateTypeName(pkg_path, type_name string) *TypeName {
 	}
 }
 
-// Create TypeName from colon-seperated spec:
-//   [full_pkg_path:]type
+// Create TypeName from dot-seperated spec:
+//   [full_pkg_path.]type
 // Example:
 //   "[]byte"
-//   "sql:NullString"
-//   "github.com/go-sql-driver/mysql:NullTime"
+//   "sql.NullString"
+//   "github.com/go-sql-driver/mysql.NullTime"
 func (scopes *Scopes) CreateTypeNameFromSpec(s string) *TypeName {
 	var pkg_path, type_name string
-	i := strings.LastIndex(s, ":")
+	i := strings.LastIndex(s, ".")
 	if i < 0 {
 		pkg_path = ""
 		type_name = s
