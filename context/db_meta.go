@@ -17,15 +17,18 @@ import (
 type DBMeta struct {
 	*model.DBInfo
 
-	Name   string
+	Name       string
+	PascalName string
+
 	Tables map[string]*TableMeta
 }
 
 func NewDBMeta(ctx *Context, db_info *model.DBInfo) (*DBMeta, error) {
 	ret := &DBMeta{
-		DBInfo: db_info,
-		Name:   db_info.Name.L,
-		Tables: make(map[string]*TableMeta),
+		DBInfo:     db_info,
+		Name:       db_info.Name.L,
+		PascalName: utils.PascalCase(db_info.Name.L),
+		Tables:     make(map[string]*TableMeta),
 	}
 	for _, table_info := range db_info.Tables {
 		table_meta, err := NewTableMeta(ctx, table_info)
@@ -37,15 +40,13 @@ func NewDBMeta(ctx *Context, db_info *model.DBInfo) (*DBMeta, error) {
 	return ret, nil
 }
 
-func (db *DBMeta) PascalName() string {
-	return utils.PascalCase(db.Name)
-}
-
 // TableMeta contains meta information of a table.
 type TableMeta struct {
 	*model.TableInfo
 
-	Name        string
+	Name       string
+	PascalName string
+
 	Columns     []*ColumnMeta
 	Indices     []*IndexMeta
 	ForeignKeys []*FKMeta
@@ -62,6 +63,7 @@ func NewTableMeta(ctx *Context, table_info *model.TableInfo) (*TableMeta, error)
 	ret := &TableMeta{
 		TableInfo:    table_info,
 		Name:         table_info.Name.L,
+		PascalName:   utils.PascalCase(table_info.Name.L),
 		Columns:      make([]*ColumnMeta, 0, len(table_info.Columns)),
 		Indices:      make([]*IndexMeta, 0, len(table_info.Indices)),
 		ForeignKeys:  make([]*FKMeta, 0, len(table_info.ForeignKeys)),
@@ -112,10 +114,6 @@ func NewTableMeta(ctx *Context, table_info *model.TableInfo) (*TableMeta, error)
 	}
 
 	return ret, nil
-}
-
-func (t *TableMeta) PascalName() string {
-	return utils.PascalCase(t.Name)
 }
 
 // Return primary key columns if exists.
@@ -169,7 +167,9 @@ func (t *TableMeta) ColumnByName(name string) *ColumnMeta {
 type ColumnMeta struct {
 	*model.ColumnInfo
 
-	Name   string
+	Name       string
+	PascalName string
+
 	Offset int
 
 	// Column field type.
@@ -197,6 +197,7 @@ func NewColumnMeta(ctx *Context, column_info *model.ColumnInfo) (*ColumnMeta, er
 	ret := &ColumnMeta{
 		ColumnInfo: column_info,
 		Name:       column_info.Name.L,
+		PascalName: utils.PascalCase(column_info.Name.L),
 		Offset:     column_info.Offset,
 		Type:       column_info.FieldType,
 	}
@@ -221,15 +222,13 @@ func NewColumnMeta(ctx *Context, column_info *model.ColumnInfo) (*ColumnMeta, er
 	return ret, nil
 }
 
-func (c *ColumnMeta) PascalName() string {
-	return utils.PascalCase(c.Name)
-}
-
 // IndexMeta contains meta data of an index.
 type IndexMeta struct {
 	*model.IndexInfo
 
-	Name          string
+	Name       string
+	PascalName string
+
 	Unique        bool
 	Primary       bool
 	ColumnIndices []int
@@ -239,6 +238,7 @@ func NewIndexMeta(ctx *Context, index_info *model.IndexInfo) (*IndexMeta, error)
 	ret := &IndexMeta{
 		IndexInfo:     index_info,
 		Name:          index_info.Name.L,
+		PascalName:    utils.PascalCase(index_info.Name.L),
 		Unique:        index_info.Unique,
 		Primary:       index_info.Primary,
 		ColumnIndices: make([]int, 0, len(index_info.Columns)),
@@ -263,15 +263,13 @@ func NewIndexMetaFromPKHandler(ctx *Context, table_info *model.TableInfo) *Index
 	}
 }
 
-func (i *IndexMeta) PascalName() string {
-	return utils.PascalCase(i.Name)
-}
-
 // FKMeta contains meta data of a foreign key.
 type FKMeta struct {
 	*model.FKInfo
 
-	Name         string
+	Name       string
+	PascalName string
+
 	ColNames     []string
 	RefTableName string
 	RefColNames  []string
@@ -280,6 +278,7 @@ type FKMeta struct {
 func NewFKMeta(ctx *Context, fk_info *model.FKInfo) (*FKMeta, error) {
 	ret := &FKMeta{
 		Name:         fk_info.Name.L,
+		PascalName:   utils.PascalCase(fk_info.Name.L),
 		FKInfo:       fk_info,
 		ColNames:     make([]string, 0, len(fk_info.Cols)),
 		RefTableName: fk_info.RefTable.L,
@@ -292,8 +291,4 @@ func NewFKMeta(ctx *Context, fk_info *model.FKInfo) (*FKMeta, error) {
 		ret.RefColNames = append(ret.RefColNames, refcol.L)
 	}
 	return ret, nil
-}
-
-func (fk *FKMeta) PascalName() string {
-	return utils.PascalCase(fk.Name)
 }
