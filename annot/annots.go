@@ -83,7 +83,32 @@ func (a *ArgAnnot) Set(key, val string) error {
 	return nil
 }
 
+// Declare a binding.
+type BindAnnot struct {
+	// Bind arg name.
+	Name string
+}
+
+func (a *BindAnnot) SetPrimary(val string) error {
+	if val == "" {
+		return fmt.Errorf("bind: missing bind name")
+	}
+	if !utils.IsIdent(val) {
+		return fmt.Errorf("bind: bind name %+q is not a valid identifier", val)
+	}
+	a.Name = val
+	return nil
+}
+
+func (a *BindAnnot) Set(key, val string) error {
+	if key == "" {
+		return nil
+	}
+	return fmt.Errorf("bind: unknown option %+q", key)
+}
+
 func init() {
 	RegistAnnot((*FuncAnnot)(nil), "func")
 	RegistAnnot((*ArgAnnot)(nil), "arg", "param")
+	RegistAnnot((*BindAnnot)(nil), "bind")
 }
