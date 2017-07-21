@@ -11,18 +11,20 @@ import (
 // This file contains xxxMeta types. They are used to store extracted
 // meta information from tidb model.xxxInfo.
 
+// All names used here should use the lower case version.
+
 // DBMeta contains meta information of a database.
 type DBMeta struct {
 	*model.DBInfo
 
-	Name   utils.Str
+	Name   string
 	Tables map[string]*TableMeta
 }
 
 func NewDBMeta(ctx *Context, db_info *model.DBInfo) (*DBMeta, error) {
 	ret := &DBMeta{
 		DBInfo: db_info,
-		Name:   utils.NewStrFromCIStr(db_info.Name),
+		Name:   db_info.Name.L,
 		Tables: make(map[string]*TableMeta),
 	}
 	for _, table_info := range db_info.Tables {
@@ -30,16 +32,20 @@ func NewDBMeta(ctx *Context, db_info *model.DBInfo) (*DBMeta, error) {
 		if err != nil {
 			return nil, err
 		}
-		ret.Tables[table_meta.Name.O] = table_meta
+		ret.Tables[table_meta.Name] = table_meta
 	}
 	return ret, nil
+}
+
+func (db *DBMeta) PascalName() string {
+	return utils.PascalCase(db.Name)
 }
 
 // TableMeta contains meta information of a table.
 type TableMeta struct {
 	*model.TableInfo
 
-	Name        utils.Str
+	Name        string
 	Columns     []*ColumnMeta
 	Indices     []*IndexMeta
 	ForeignKeys []*FKMeta
@@ -55,7 +61,7 @@ type TableMeta struct {
 func NewTableMeta(ctx *Context, table_info *model.TableInfo) (*TableMeta, error) {
 	ret := &TableMeta{
 		TableInfo:    table_info,
-		Name:         utils.NewStrFromCIStr(table_info.Name),
+		Name:         table_info.Name.L,
 		Columns:      make([]*ColumnMeta, 0, len(table_info.Columns)),
 		Indices:      make([]*IndexMeta, 0, len(table_info.Indices)),
 		ForeignKeys:  make([]*FKMeta, 0, len(table_info.ForeignKeys)),
@@ -68,11 +74,11 @@ func NewTableMeta(ctx *Context, table_info *model.TableInfo) (*TableMeta, error)
 			return nil, err
 		}
 		ret.Columns = append(ret.Columns, column_meta)
-		ret.columnByName[column_meta.Name.O] = column_meta
+		ret.columnByName[column_meta.Name] = column_meta
 
 		if column_meta.IsAutoInc {
 			if ret.autoIncColumn != nil {
-				panic(fmt.Errorf("Multiple auto increment columns found in table %q", ret.Name.O))
+				panic(fmt.Errorf("Multiple auto increment columns found in table %q", ret.Name))
 			}
 			ret.autoIncColumn = column_meta
 		}
@@ -91,7 +97,7 @@ func NewTableMeta(ctx *Context, table_info *model.TableInfo) (*TableMeta, error)
 		ret.Indices = append(ret.Indices, index_meta)
 		if index_meta.Primary {
 			if ret.primaryIndex != nil {
-				panic(fmt.Errorf("Multiple primary index found in table %q", ret.Name.O))
+				panic(fmt.Errorf("Multiple primary index found in table %q", ret.Name))
 			}
 			ret.primaryIndex = index_meta
 		}
@@ -106,6 +112,10 @@ func NewTableMeta(ctx *Context, table_info *model.TableInfo) (*TableMeta, error)
 	}
 
 	return ret, nil
+}
+
+func (t *TableMeta) PascalName() string {
+	return utils.PascalCase(t.Name)
 }
 
 // Return primary key columns if exists.
@@ -159,7 +169,7 @@ func (t *TableMeta) ColumnByName(name string) *ColumnMeta {
 type ColumnMeta struct {
 	*model.ColumnInfo
 
-	Name   utils.Str
+	Name   string
 	Offset int
 
 	// Column field type.
@@ -186,7 +196,7 @@ type ColumnMeta struct {
 func NewColumnMeta(ctx *Context, column_info *model.ColumnInfo) (*ColumnMeta, error) {
 	ret := &ColumnMeta{
 		ColumnInfo: column_info,
-		Name:       utils.NewStrFromCIStr(column_info.Name),
+		Name:       column_info.Name.L,
 		Offset:     column_info.Offset,
 		Type:       column_info.FieldType,
 	}
@@ -211,11 +221,15 @@ func NewColumnMeta(ctx *Context, column_info *model.ColumnInfo) (*ColumnMeta, er
 	return ret, nil
 }
 
+func (c *ColumnMeta) PascalName() string {
+	return utils.PascalCase(c.Name)
+}
+
 // IndexMeta contains meta data of an index.
 type IndexMeta struct {
 	*model.IndexInfo
 
-	Name          utils.Str
+	Name          string
 	Unique        bool
 	Primary       bool
 	ColumnIndices []int
@@ -224,7 +238,7 @@ type IndexMeta struct {
 func NewIndexMeta(ctx *Context, index_info *model.IndexInfo) (*IndexMeta, error) {
 	ret := &IndexMeta{
 		IndexInfo:     index_info,
-		Name:          utils.NewStrFromCIStr(index_info.Name),
+		Name:          index_info.Name.L,
 		Unique:        index_info.Unique,
 		Primary:       index_info.Primary,
 		ColumnIndices: make([]int, 0, len(index_info.Columns)),
@@ -242,18 +256,22 @@ func NewIndexMetaFromPKHandler(ctx *Context, table_info *model.TableInfo) *Index
 	}
 	column_info := table_info.GetPkColInfo()
 	return &IndexMeta{
-		Name:          utils.NewStr("Primary"),
+		Name:          "primary",
 		Unique:        true,
 		Primary:       true,
 		ColumnIndices: []int{column_info.Offset},
 	}
 }
 
+func (i *IndexMeta) PascalName() string {
+	return utils.PascalCase(i.Name)
+}
+
 // FKMeta contains meta data of a foreign key.
 type FKMeta struct {
 	*model.FKInfo
 
-	Name         utils.Str
+	Name         string
 	ColNames     []string
 	RefTableName string
 	RefColNames  []string
@@ -261,16 +279,21 @@ type FKMeta struct {
 
 func NewFKMeta(ctx *Context, fk_info *model.FKInfo) (*FKMeta, error) {
 	ret := &FKMeta{
+		Name:         fk_info.Name.L,
 		FKInfo:       fk_info,
 		ColNames:     make([]string, 0, len(fk_info.Cols)),
-		RefTableName: fk_info.RefTable.O,
+		RefTableName: fk_info.RefTable.L,
 		RefColNames:  make([]string, 0, len(fk_info.RefCols)),
 	}
 	for _, col := range fk_info.Cols {
-		ret.ColNames = append(ret.ColNames, col.O)
+		ret.ColNames = append(ret.ColNames, col.L)
 	}
 	for _, refcol := range fk_info.RefCols {
-		ret.RefColNames = append(ret.RefColNames, refcol.O)
+		ret.RefColNames = append(ret.RefColNames, refcol.L)
 	}
 	return ret, nil
+}
+
+func (fk *FKMeta) PascalName() string {
+	return utils.PascalCase(fk.Name)
 }

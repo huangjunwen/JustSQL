@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"github.com/pingcap/tidb/model"
 	"regexp"
 	"strings"
 	"unicode"
@@ -30,27 +29,4 @@ func CamelCase(s string) string {
 	b := []byte(PascalCase(s))
 	b[0] = byte(unicode.ToLower(rune(b[0])))
 	return string(b)
-}
-
-// String and its variants. (CamelCase/...)
-type Str struct {
-	O          string // hello_world
-	CamelCase  string // helloWorld
-	PascalCase string // HelloWorld
-}
-
-func (s Str) String() string {
-	return s.PascalCase
-}
-
-func NewStr(s string) Str {
-	return Str{
-		O:          s,
-		CamelCase:  CamelCase(s),
-		PascalCase: PascalCase(s),
-	}
-}
-
-func NewStrFromCIStr(ci model.CIStr) Str {
-	return NewStr(ci.O)
 }

@@ -6,6 +6,7 @@ import (
 )
 
 func handleTableMeta(ctx *context.Context, obj interface{}) (interface{}, error) {
+
 	table_meta, ok := obj.(*context.TableMeta)
 	if !ok {
 		return nil, fmt.Errorf("handleTableMeta: expect *context.TableMeta but got %T", obj)

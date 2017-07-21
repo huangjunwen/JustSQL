@@ -18,8 +18,8 @@ func init() {
 {{/* =========================== */}}
 {{/*          declares           */}}
 {{/* =========================== */}}
-{{- $table_name := .Table.Name.O -}}
-{{- $struct_name := .Table.Name -}}
+{{- $table_name := .Table.PascalName -}}
+{{- $struct_name := .Table.PascalName -}}
 {{- $cols := .Table.Columns -}}
 {{- $auto_inc_col := .Table.AutoIncColumn -}}
 {{- $primary_cols := .Table.PrimaryColumns -}}
@@ -30,7 +30,7 @@ func init() {
 {{/* =========================== */}}
 {{/*          enum               */}}
 {{/* =========================== */}}
-{{- $enum_name := printf "%s%s" $struct_name $col.Name -}}
+{{- $enum_name := printf "%s%s" $struct_name $col.PascalName -}}
 
 // Enum {{ $enum_name }}.
 type {{ $enum_name }} int
@@ -89,7 +89,7 @@ func (e {{ $enum_name }}) Value() (driver.Value, error) {
 {{/* =========================== */}}
 {{/*          set                */}}
 {{/* =========================== */}}
-{{- $set_name := printf "%s%s" $struct_name $col.Name -}}
+{{- $set_name := printf "%s%s" $struct_name $col.PascalName -}}
 
 // Set {{ $set_name }}.
 type {{ $set_name }} struct {
@@ -175,11 +175,11 @@ func (s {{ $set_name }}) Value() (driver.Value, error) {
 type {{ $struct_name }} struct {
 {{ range $i, $col := $cols }}
 	{{- if or $col.IsEnum $col.IsSet }}
-	{{ $col.Name }} {{ $struct_name }}{{ $col.Name }}
+	{{ $col.PascalName }} {{ $struct_name }}{{ $col.PascalName }}
 	{{- else }}
-	{{ $col.Name }} {{ $col.AdaptType }}
+	{{ $col.PascalName }} {{ $col.AdaptType }}
 	{{- end -}}
-	{{- " " -}}// {{ $col.Name.O }}: {{ if $col.IsNotNULL }}NOT NULL;{{ else }}NULL;{{ end }}{{ if $col.IsAutoInc }} AUTO INCREMENT;{{ end }} DEFAULT {{ printf "%#v" $col.DefaultValue }};{{ if $col.IsOnUpdateNow }} ON UPDATE "CURRENT_TIMESTAMP";{{ end }}
+	{{- " " -}}// {{ $col.Name }}: {{ if $col.IsNotNULL }}NOT NULL;{{ else }}NULL;{{ end }}{{ if $col.IsAutoInc }} AUTO INCREMENT;{{ end }} DEFAULT {{ printf "%#v" $col.DefaultValue }};{{ if $col.IsOnUpdateNow }} ON UPDATE "CURRENT_TIMESTAMP";{{ end }}
 {{- end }}
 }
 
@@ -197,7 +197,7 @@ func (entry_ *{{ $struct_name }}) Insert(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 		return err_
 	}
 
-	entry_.{{ $auto_inc_col.Name }} = {{ $auto_inc_col.AdaptType }}(last_insert_id_)
+	entry_.{{ $auto_inc_col.PascalName }} = {{ $auto_inc_col.AdaptType }}(last_insert_id_)
 	{{ end -}}
 
 	return nil
@@ -207,10 +207,10 @@ func (entry_ *{{ $struct_name }}) Insert(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 
 func (entry_ *{{ $struct_name }}) Select(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
 	const sql_ = "SELECT {{ printf "%s" (column_name_list $cols) }} FROM {{ $table_name }} " +
-		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }}"
+		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}={{ placeholder }} {{ end }}"
 
-	row_ := tx_.QueryRowContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
-	if err_ := row_.Scan({{ range $i, $col := $cols }}{{ if ne $i 0 }}, {{ end }}&entry_.{{ $col.Name }}{{ end }}); err_ != nil {
+	row_ := tx_.QueryRowContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.PascalName }}{{ end }})
+	if err_ := row_.Scan({{ range $i, $col := $cols }}{{ if ne $i 0 }}, {{ end }}&entry_.{{ $col.PascalName }}{{ end }}); err_ != nil {
 		return err_
 	}
 
@@ -219,10 +219,10 @@ func (entry_ *{{ $struct_name }}) Select(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 
 {{ if ne (len $non_primary_cols) 0 -}}
 func (entry_ *{{ $struct_name }}) Update(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
-	const sql_ = "UPDATE {{ $table_name }} SET {{ range $i, $col := $non_primary_cols }}{{ if ne $i 0 }}, {{ end }}{{ $col.Name.O }}={{ placeholder }}{{ end }}" +
-		" WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }}"
+	const sql_ = "UPDATE {{ $table_name }} SET {{ range $i, $col := $non_primary_cols }}{{ if ne $i 0 }}, {{ end }}{{ $col.Name }}={{ placeholder }}{{ end }}" +
+		" WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}={{ placeholder }} {{ end }}"
 
-	_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $non_primary_cols }}, entry_.{{ $col.Name }}{{ end }}{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
+	_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $non_primary_cols }}, entry_.{{ $col.PascalName }}{{ end }}{{ range $i, $col := $primary_cols }}, entry_.{{ $col.PascalName }}{{ end }})
 	if err_ != nil {
 		return err_
 	}
@@ -233,9 +233,9 @@ func (entry_ *{{ $struct_name }}) Update(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 
 func (entry_ *{{ $struct_name }}) Delete(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
 	const sql_ = "DELETE FROM {{ $table_name }} " +
-		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name.O }}={{ placeholder }} {{ end }}"
+		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}={{ placeholder }} {{ end }}"
 
-	_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.Name }}{{ end }})
+	_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.PascalName }}{{ end }})
 	if err_ != nil {
 		return err_
 	}

@@ -23,7 +23,7 @@ func notNil(v interface{}) (res bool) {
 func columnNameList(cols []*context.ColumnMeta) string {
 	parts := make([]string, 0, len(cols))
 	for _, col := range cols {
-		parts = append(parts, col.Name.O)
+		parts = append(parts, col.Name)
 	}
 	return strings.Join(parts, ", ")
 }
