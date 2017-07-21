@@ -38,16 +38,16 @@ func RegistAnnot(obj Annot, names ...string) {
 
 // Parse annotation.
 func ParseAnnot(src string) (Annot, error) {
-	// Special case for ContentAnnot
+	// Special case for SubsAnnot
 	if len(src) <= 0 {
-		return &ContentAnnot{
+		return &SubsAnnot{
 			Content: "",
 		}, nil
 	}
 
 	switch src[0] {
 	case ' ', '\t', '\n', '\r':
-		return &ContentAnnot{
+		return &SubsAnnot{
 			Content: strings.TrimSpace(src),
 		}, nil
 	}

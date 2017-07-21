@@ -168,7 +168,7 @@ func TestCommentWithAnnot(t *testing.T) {
 			Offset:  0,
 			Length:  7,
 			Content: "$",
-			Annot: &ContentAnnot{
+			Annot: &SubsAnnot{
 				Content: "",
 			},
 		},

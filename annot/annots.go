@@ -6,16 +6,16 @@ import (
 )
 
 // Substitute content directly.
-type ContentAnnot struct {
+type SubsAnnot struct {
 	Content string
 }
 
-func (a *ContentAnnot) SetPrimary(val string) error {
+func (a *SubsAnnot) SetPrimary(val string) error {
 	a.Content = val
 	return nil
 }
 
-func (a *ContentAnnot) Set(key, val string) error {
+func (a *SubsAnnot) Set(key, val string) error {
 	if key == "" {
 		return nil
 	}
