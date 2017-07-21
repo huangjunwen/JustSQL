@@ -118,11 +118,41 @@ import (
 
 `))
 
-func genPackageFileHead(ctx *context.Context, w io.Writer) error {
+func writeOutputFileHead(w io.Writer) error {
 	return pkg_file_head_tmpl.Execute(w, map[string]interface{}{
 		"PackageName": package_name,
 		"Imports":     ctx.Scopes.CurrScope().ListPkg(),
 	})
+}
+
+func writeOutputFile(output_filename string, body io.Reader) {
+
+	var output bytes.Buffer
+
+	// Write head.
+	if err := writeOutputFileHead(&output); err != nil {
+		log.Fatalf("writeOutputFileHead(%q): %s", output_filename, err)
+	}
+
+	// Write body.
+	io.Copy(&output, body)
+
+	// Open file.
+	f, err := os.OpenFile(filepath.Join(output_dir, output_filename), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		log.Fatalf("os.OpenFile(%q): %s", output_filename, err)
+	}
+	defer f.Close()
+
+	// Format and write.
+	if formatted, err := format.Source(output.Bytes()); err != nil {
+		log.Fatalf("format.Source(%q): %s", output_filename, err)
+	} else {
+		if _, err := f.Write(formatted); err != nil {
+			log.Fatalf("File.Write(%q): %s", output_filename, err)
+		}
+	}
+
 }
 
 func readGlobs(globs []string) func() (string, []byte, bool) {
@@ -216,9 +246,9 @@ func exportTables() {
 
 	for _, table_meta := range db_meta.Tables {
 
-		log.Infof("exportTable(%q) ...", table_meta.Name.O)
+		log.Infof("exportTable(%q) ...", table_meta.Name)
 
-		scope := fmt.Sprintf("%s.ddl.go", table_meta.Name.O)
+		scope := fmt.Sprintf("%s.tb.go", table_meta.Name)
 		ctx.Scopes.SwitchScope(scope)
 
 		var body bytes.Buffer
@@ -226,28 +256,55 @@ func exportTables() {
 			log.Fatalf("render.Render(%q): %s", scope, err)
 		}
 
-		var out bytes.Buffer
-		if err := genPackageFileHead(ctx, &out); err != nil {
-			log.Fatalf("genPackageFileHead(%q): %s", scope, err)
-		}
+		writeOutputFile(scope, &body)
+	}
+}
 
-		io.Copy(&out, &body)
+func processDML() {
 
-		f, err := os.OpenFile(filepath.Join(output_dir, scope), os.O_RDWR|os.O_CREATE, 0755)
+	db := ctx.DB
+	iter := readGlobs(dml_globs)
+	log.Infof("DML processing ...")
+
+	for file, content, ok := iter(); ok; file, content, ok = iter() {
+
+		scope := fmt.Sprintf("%s.go", filepath.Base(file))
+		ctx.Scopes.SwitchScope(file)
+
+		var body bytes.Buffer
+
+		// Parse content.
+		content_str := string(content)
+		stmts, err := db.Parse(content_str)
 		if err != nil {
-			log.Fatalf("os.OpenFile(%q): %s", scope, err)
+			log.Fatalf("db.Parse(%q): %s", file, err)
 		}
-		defer f.Close()
 
-		if formatted, err := format.Source(out.Bytes()); err != nil {
-			log.Fatalf("format.Source(%q): %s", scope, err)
-		} else {
-			if _, err := f.Write(formatted); err != nil {
-				log.Fatalf("File.Write(%q): %s", scope, err)
+		// Check and render stmts.
+		for _, stmt := range stmts {
+
+			stmt_text := stmt.Text()
+			switch stmt.(type) {
+			default:
+				log.Fatalf("%q: %q (%T) is not an allowed statement type", file, stmt_text, stmt)
+
+			case *ast.SelectStmt:
+
 			}
+
+			if err := ri.Run(stmt, &body); err != nil {
+				log.Fatalf("render.Render(%q): %s", stmt_text, err)
+			}
+
 		}
+
+		// Output to file.
+		writeOutputFile(scope, &body)
 
 	}
+
+	log.Infof("DDL processed")
+
 }
 
 func main() {
@@ -255,5 +312,6 @@ func main() {
 	parseOptionsAndInit()
 	loadDDL()
 	exportTables()
+	processDML()
 
 }
