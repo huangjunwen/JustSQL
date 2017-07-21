@@ -29,7 +29,7 @@ func columnNameList(cols []*context.ColumnMeta) string {
 }
 
 func placeholder() string {
-	return "?"
+	return context.PLACEHOLDER
 }
 
 // Return '?, ?, ?, ...'

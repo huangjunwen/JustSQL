@@ -6,7 +6,9 @@ import (
 )
 
 const (
-	DEFAULT_DB_NAME = "justsql"
+	DEFAULT_DB_NAME  = "justsql"
+	PLACEHOLDER      = "?"
+	NAME_PLACEHOLDER = ":"
 )
 
 // Runtime context.
