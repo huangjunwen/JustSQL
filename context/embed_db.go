@@ -5,10 +5,7 @@ import (
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/context"
 	"github.com/pingcap/tidb/domain"
-	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/plan"
 	"github.com/pingcap/tidb/sessionctx"
 )
 
@@ -47,41 +44,24 @@ func NewEmbedDB(store_path string) (*EmbedDB, error) {
 
 }
 
+// DB context.
+func (db *EmbedDB) Ctx() context.Context {
+	return db.Sess.(context.Context)
+}
+
 // Get Tidb domain (storage space).
 func (db *EmbedDB) Domain() *domain.Domain {
-	return sessionctx.GetDomain(db.Sess.(context.Context))
+	return sessionctx.GetDomain(db.Ctx())
 }
 
 // Parse SQLs.
 func (db *EmbedDB) Parse(src string) ([]ast.StmtNode, error) {
-	ctx := db.Sess.(context.Context)
-	p := parser.New()
-	p.SetSQLMode(ctx.GetSessionVars().SQLMode)
-	charset, collation := ctx.GetSessionVars().GetCharsetInfo()
-	return p.Parse(src, charset, collation)
+	return tidb.Parse(db.Ctx(), src)
 }
 
-// Resolve names/types in SQL statement.
-func (db *EmbedDB) Resolve(stmt ast.StmtNode) error {
-	ctx := db.Sess.(context.Context)
-	is := db.Domain().InfoSchema()
-
-	// This is part of tidb.Compile. Also refer expression/typeinferer_test.go
-
-	// Resolve column names and table names, ResultSetNode types' ResultFields
-	// are generated in this step.
-	if err := plan.ResolveName(stmt, is, ctx); err != nil {
-		return err
-	}
-	// Validate the statement.
-	if err := plan.Validate(stmt, false); err != nil {
-		return err
-	}
-	// Infer expression types, like 'count(*) AS cnt'
-	if err := expression.InferType(ctx.GetSessionVars().StmtCtx, stmt); err != nil {
-		return err
-	}
-	return nil
+// Compile stmt.
+func (db *EmbedDB) Compile(stmt ast.StmtNode) (ast.Statement, error) {
+	return tidb.Compile(db.Ctx(), stmt)
 }
 
 // Execute some SQLs.

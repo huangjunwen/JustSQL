@@ -13,7 +13,7 @@ func handleSelectStmt(ctx *context.Context, obj interface{}) (interface{}, error
 		return nil, fmt.Errorf("handleSelectStmt: expect *ast.SelectStmt but got %T", obj)
 	}
 
-	if err := ctx.DB.Resolve(select_stmt); err != nil {
+	if _, err := ctx.DB.Compile(select_stmt); err != nil {
 		return nil, err
 	}
 
