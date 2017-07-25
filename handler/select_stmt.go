@@ -22,8 +22,13 @@ func handleSelectStmt(ctx *context.Context, obj interface{}) (interface{}, error
 		return nil, err
 	}
 
+	select_stmt_meta, err := context.NewSelectStmtMeta(ctx, select_stmt)
+	if err != nil {
+		return nil, err
+	}
+
 	return map[string]interface{}{
-		"Stmt": select_stmt,
+		"Stmt": select_stmt_meta,
 		"Func": fn,
 	}, nil
 
