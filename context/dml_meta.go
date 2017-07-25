@@ -56,6 +56,9 @@ func newResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, er
 				"Can't find a valid identifier in %+q, you can add 'AS alias'", name)
 		}
 	}
+	if rf.TableAsName.L != "" {
+		name = fmt.Sprintf("%s_%s", rf.TableAsName.L, name)
+	}
 
 	return &ResultFieldMeta{
 		ResultField: rf,
@@ -96,6 +99,24 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 			return nil, err
 		}
 		ret.ResultFields = append(ret.ResultFields, rfm)
+	}
+
+	// Resolve name conflicts.
+	names := make(map[string]*ResultFieldMeta)
+	for _, rfm := range ret.ResultFields {
+		name := rfm.Name
+		pascal_name := rfm.PascalName
+		for i := 1; ; i += 1 {
+			if _, ok := names[name]; !ok {
+				break
+			}
+			name = fmt.Sprintf("%s_%d", rfm.Name, i)
+			pascal_name = fmt.Sprintf("%s_%d", rfm.PascalName, i)
+		}
+
+		rfm.Name = name
+		rfm.PascalName = pascal_name
+		names[name] = rfm
 	}
 
 	return ret, nil
