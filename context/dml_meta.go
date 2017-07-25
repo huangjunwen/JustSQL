@@ -88,6 +88,7 @@ type SelectStmtMeta struct {
 
 func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, error) {
 
+	// Create result fields meta.
 	rfs := stmt.GetResultFields()
 	ret := &SelectStmtMeta{
 		SelectStmt:   stmt,
@@ -101,7 +102,7 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 		ret.ResultFields = append(ret.ResultFields, rfm)
 	}
 
-	// Resolve name conflicts.
+	// Resolve name conflicts in result fields.
 	names := make(map[string]*ResultFieldMeta)
 	for _, rfm := range ret.ResultFields {
 		name := rfm.Name
