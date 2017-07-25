@@ -39,6 +39,7 @@ var (
 	ddl_globs  StringArr
 	dml_globs  StringArr
 	output_dir string
+	no_format  bool
 	// Global variables.
 	package_name string
 	ctx          *context.Context
@@ -47,10 +48,11 @@ var (
 
 func parseOptionsAndInit() {
 
-	flag.StringVar(&log_level, "l", "error", "Set level of logging: fatal/error/warn/info/debug.")
-	flag.Var(&ddl_globs, "d", "Glob of DDL files (file containing DDL SQL). Multiple \"-d\" is allowed.")
-	flag.Var(&dml_globs, "m", "Glob of DML files (file containing DML SQL). Multiple \"-m\" is allowed.")
+	flag.StringVar(&log_level, "loglevel", "error", "Set level of logging: fatal/error/warn/info/debug.")
+	flag.Var(&ddl_globs, "ddl", "Glob of DDL files (file containing DDL SQL). Multiple \"-ddl\" is allowed.")
+	flag.Var(&dml_globs, "dml", "Glob of DML files (file containing DML SQL). Multiple \"-dml\" is allowed.")
 	flag.StringVar(&output_dir, "o", "", "Output directory.")
+	flag.BoolVar(&no_format, "nofmt", false, "Do not format (go fmt) output files.")
 	flag.Parse()
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
@@ -144,11 +146,16 @@ func writeOutputFile(output_filename string, body io.Reader) {
 	}
 	defer f.Close()
 
-	// Format and write.
-	if formatted, err := format.Source(output.Bytes()); err != nil {
-		log.Fatalf("format.Source(%q): %s", output_filename, err)
+	if !no_format {
+		if formatted, err := format.Source(output.Bytes()); err != nil {
+			log.Fatalf("format.Source(%q): %s", output_filename, err)
+		} else {
+			if _, err := f.Write(formatted); err != nil {
+				log.Fatalf("File.Write(%q): %s", output_filename, err)
+			}
+		}
 	} else {
-		if _, err := f.Write(formatted); err != nil {
+		if _, err := f.Write(output.Bytes()); err != nil {
 			log.Fatalf("File.Write(%q): %s", output_filename, err)
 		}
 	}
