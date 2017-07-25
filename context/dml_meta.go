@@ -27,7 +27,7 @@ type ResultFieldMeta struct {
 	Column *ColumnMeta
 }
 
-func newResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, error) {
+func NewResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, error) {
 
 	db_meta, err := ctx.DBMeta()
 	if err != nil {
@@ -94,7 +94,7 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 		ResultFields: make([]*ResultFieldMeta, 0, len(rfs)),
 	}
 	for _, rf := range rfs {
-		rfm, err := newResultFieldMeta(ctx, rf)
+		rfm, err := NewResultFieldMeta(ctx, rf)
 		if err != nil {
 			return nil, err
 		}

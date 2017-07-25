@@ -71,7 +71,7 @@ func {{ $func_name }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg 
 	// - Rebind.
 	query_ = tx_.Rebind(query_)
 
-{{- if $return_one }}
+{{ if $return_one -}}
 	// - Query.
 	row_, err_ := tx_.QueryRowxContext(ctx_, query_, args_...)
 	if err_ != nil {
@@ -109,7 +109,7 @@ func {{ $func_name }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg 
 
 	return ret_, nil
 
-{{ end -}}
+{{- end }}
 
 }
 
