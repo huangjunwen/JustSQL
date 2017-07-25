@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/huangjunwen/JustSQL/utils"
 	"github.com/pingcap/tidb/ast"
+	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/util/types"
 )
 
@@ -66,6 +67,14 @@ func newResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, er
 		Column:      column,
 	}, nil
 
+}
+
+func (rf *ResultFieldMeta) IsEnum() bool {
+	return rf.Type.Tp == mysql.TypeEnum
+}
+
+func (rf *ResultFieldMeta) IsSet() bool {
+	return rf.Type.Tp == mysql.TypeSet
 }
 
 type SelectStmtMeta struct {

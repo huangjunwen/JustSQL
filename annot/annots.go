@@ -26,6 +26,9 @@ func (a *SubsAnnot) Set(key, val string) error {
 type FuncAnnot struct {
 	// Function name.
 	Name string
+
+	// Result information.
+	Return string
 }
 
 func (a *FuncAnnot) SetPrimary(val string) error {
@@ -41,6 +44,10 @@ func (a *FuncAnnot) SetPrimary(val string) error {
 
 func (a *FuncAnnot) Set(key, val string) error {
 	if key == "" {
+		return nil
+	}
+	if key == "return" {
+		a.Return = val
 		return nil
 	}
 	return fmt.Errorf("func: unknown option %+q", key)

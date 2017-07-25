@@ -37,6 +37,9 @@ type DMLFunc struct {
 
 	// Processed text.
 	Query string
+
+	// Return information.
+	Return string
 }
 
 var no_name_cnt = 0
@@ -77,6 +80,7 @@ func NewDMLFunc(ctx *context.Context, node ast.DMLNode) (*DMLFunc, error) {
 
 		case *annot.FuncAnnot:
 			ret.Name = a.Name
+			ret.Return = a.Return
 
 		case *annot.ArgAnnot:
 			ret.Args = append(ret.Args, &DMLFuncArg{
