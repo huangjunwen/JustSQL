@@ -75,6 +75,10 @@ func (db *EmbedDB) Compile(stmt ast.StmtNode) (ast.Statement, error) {
 
 // Execute some SQLs.
 func (db *EmbedDB) Execute(src string) ([]ast.RecordSet, error) {
+	ret, err := db.Sess.Execute(src)
+	if err != nil {
+		return nil, fmt.Errorf("Execute(%+q): %s", src, err)
+	}
 	return db.Sess.Execute(src)
 }
 

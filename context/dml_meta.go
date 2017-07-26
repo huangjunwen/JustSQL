@@ -24,7 +24,7 @@ type ResultFieldMeta struct {
 	AdaptType *TypeName
 
 	// If this is a field from table column.
-	// The following fields have values.
+	// The following will have values.
 	Table  *TableMeta
 	Column *ColumnMeta
 }
@@ -45,7 +45,7 @@ func NewResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, er
 	}
 
 	// Determin the name.
-	name, err := resultFieldAsIdentifier(rf, false)
+	name, err := resultFieldNameAsIdentifier(rf, false)
 	if err != nil {
 		return nil, err
 	}
@@ -315,9 +315,9 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, error)
 			}
 
 			for j, rf := range rfs {
-				rf_name, err := resultFieldAsIdentifier(rf, true)
+				rf_name, err := resultFieldNameAsIdentifier(rf, true)
 				if err != nil {
-					return nil, fmt.Errorf("%s resultFieldAsIdentifier for %+q[%d]: %s",
+					return nil, fmt.Errorf("%s resultFieldNameAsIdentifier for %+q[%d]: %s",
 						err_prefix, table_name, j, err)
 				}
 				expan = append(expan, table_name+"."+rf_name)
@@ -337,9 +337,9 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, error)
 			for j, table := range sources.Tables {
 				table_name = r_table_map[j]
 				for k, rf := range table.GetResultFields() {
-					rf_name, err := resultFieldAsIdentifier(rf, true)
+					rf_name, err := resultFieldNameAsIdentifier(rf, true)
 					if err != nil {
-						return nil, fmt.Errorf("%s resultFieldAsIdentifier for %+q[%d]: %s",
+						return nil, fmt.Errorf("%s resultFieldNameAsIdentifier for %+q[%d]: %s",
 							err_prefix, table_name, k, err)
 					}
 					expan = append(expan, table_name+"."+rf_name)
@@ -368,7 +368,7 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, error)
 
 }
 
-func resultFieldAsIdentifier(rf *ast.ResultField, exact bool) (string, error) {
+func resultFieldNameAsIdentifier(rf *ast.ResultField, exact bool) (string, error) {
 
 	rf_name := rf.ColumnAsName.L
 	if rf_name == "" {
