@@ -1,6 +1,7 @@
 package context
 
 import (
+	"fmt"
 	"github.com/pingcap/tidb"
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/context"
@@ -56,12 +57,20 @@ func (db *EmbedDB) Domain() *domain.Domain {
 
 // Parse SQLs.
 func (db *EmbedDB) Parse(src string) ([]ast.StmtNode, error) {
-	return tidb.Parse(db.Ctx(), src)
+	ret, err := tidb.Parse(db.Ctx(), src)
+	if err != nil {
+		return nil, fmt.Errorf("Parse(%+q): %s", src, err)
+	}
+	return ret, nil
 }
 
 // Compile stmt.
 func (db *EmbedDB) Compile(stmt ast.StmtNode) (ast.Statement, error) {
-	return tidb.Compile(db.Ctx(), stmt)
+	ret, err := tidb.Compile(db.Ctx(), stmt)
+	if err != nil {
+		return nil, fmt.Errorf("Compile(%+q): %s", stmt.Text(), err)
+	}
+	return ret, nil
 }
 
 // Execute some SQLs.
