@@ -57,13 +57,7 @@ func NewDMLFunc(ctx *context.Context, node ast.DMLNode) (*DMLFunc, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	if len(comments) == 0 {
-		no_name_cnt += 1
-		ret.Name = fmt.Sprintf("NoName%d", no_name_cnt)
-		ret.Query = origin
-		return ret, nil
-	}
+	ret.Comments = comments
 
 	offset := 0
 	parts := []string{}
@@ -105,9 +99,12 @@ func NewDMLFunc(ctx *context.Context, node ast.DMLNode) (*DMLFunc, error) {
 	}
 
 	parts = append(parts, origin[offset:])
-
-	ret.Comments = comments
 	ret.Query = strings.Trim(strings.Join(parts, ""), " \t\n\r;")
+
+	if ret.Name == "" {
+		no_name_cnt += 1
+		ret.Name = fmt.Sprintf("NoName%d", no_name_cnt)
+	}
 
 	return ret, nil
 

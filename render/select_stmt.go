@@ -37,8 +37,10 @@ type {{ $return_type }} struct {
 {{- end }}
 }
 
-const _{{ $func_name }}QueryTmpl = template.Must(template.New({{ printf "%q" .Func.Name }}).Parse(` + "`" + `{{ printf "%s" .Func.Query }}` + "`" + `))
+const _{{ $func_name }}QueryTmpl = template.Must(template.New({{ printf "%q" .Func.Name }}).Parse(
+` + "`" + `{{ printf "%s" .Func.Query }}` + "`" + `))
 
+// Generated from: {{ printf "%+q" .Src }}
 func {{ $func_name }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg := .Func.Args }}, {{ $arg.Name}} {{ $arg.AdaptType }} {{ end }}) ({{ if $return_one }}*{{ $return_type }}{{ else }}[]*{{ $return_type }}{{ end }}, error) {
 
 	// - Dot object for template and query parameter.
