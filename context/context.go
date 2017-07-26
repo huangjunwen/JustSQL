@@ -79,3 +79,10 @@ func (ctx *Context) ExtractDBMeta() error {
 	ctx.dbMeta = db_meta
 	return nil
 }
+
+func (ctx *Context) UniqueTableName(schema, table string) string {
+	if schema != "" && schema != ctx.DBName {
+		return schema + "." + table
+	}
+	return table
+}

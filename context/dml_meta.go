@@ -80,10 +80,90 @@ func (rf *ResultFieldMeta) IsSet() bool {
 	return rf.Type.Tp == mysql.TypeSet
 }
 
+type SelectTableSourcesMeta struct {
+	// The same as in github.com/pingcap/tidb/plan/resolve.go:resolverContext
+	// NOTE: normal table names (alias) can not have same names, derived table
+	// alias names can not have same names, but normal table and derived table
+	// can have same names.
+	Tables          []*ast.TableSource
+	TableMap        map[string]int
+	DerivedTableMap map[string]int
+}
+
+func NewSelectTableSourcesMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectTableSourcesMeta, error) {
+
+	ret := &SelectTableSourcesMeta{
+		Tables:          make([]*ast.TableSource, 0),
+		TableMap:        make(map[string]int),
+		DerivedTableMap: make(map[string]int),
+	}
+
+	var collect func(*ast.Join) error
+
+	collect = func(j *ast.Join) error {
+		// Left then right
+		rss := []ast.ResultSetNode{
+			j.Left,
+			j.Right,
+		}
+		for _, rs := range rss {
+			if rs == nil {
+				continue
+			}
+			switch r := rs.(type) {
+			case *ast.TableSource:
+
+				// see github.com/pingcap/tidb/plan/resolve.go:handleTableSource
+				switch s := r.Source.(type) {
+				case *ast.TableName:
+					name := r.AsName.L
+					if name == "" {
+						name = ctx.UniqueTableName(s.Schema.L, s.Name.L)
+					}
+					if name == "" {
+						// Should not be here since it has been Compiled.
+						panic("Table name is empty")
+					}
+					ret.TableMap[name] = len(ret.Tables)
+					ret.Tables = append(ret.Tables, r)
+
+				default:
+					name := r.AsName.L
+					if name == "" {
+						// Should not be here since it has been Compiled.
+						panic("Derived table name is empty")
+					}
+					ret.DerivedTableMap[name] = len(ret.Tables)
+					ret.Tables = append(ret.Tables, r)
+				}
+
+			case *ast.Join:
+				if err := collect(r); err != nil {
+					return err
+				}
+
+			default:
+				return fmt.Errorf("Not supported type %T in collect", r)
+			}
+		}
+
+		return nil
+	}
+
+	if err := collect(stmt.From.TableRefs); err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+
+}
+
 type SelectStmtMeta struct {
 	*ast.SelectStmt
 
 	ResultFields []*ResultFieldMeta
+
+	Sources *SelectTableSourcesMeta
 }
 
 func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, error) {
@@ -118,6 +198,13 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 		rfm.Name = name
 		rfm.PascalName = pascal_name
 		names[name] = rfm
+	}
+
+	// Create table source meta.
+	if sources, err := NewSelectTableSourcesMeta(ctx, stmt); err != nil {
+		return nil, err
+	} else {
+		ret.Sources = sources
 	}
 
 	return ret, nil
