@@ -21,6 +21,8 @@ func init() {
 {{- $func_name := .Func.Name -}}
 {{- $rfs := .Stmt.ResultFields -}}
 {{- $return_type := printf "%sResult" .Func.Name -}}
+{{- $return_fields := string_arr -}}
+{{- $return_field_names := unique_names -}}
 {{- $return_one := eq .Func.Return "one" -}}
 
 {{/* =========================== */}}
@@ -29,10 +31,12 @@ func init() {
 
 type {{ $return_type }} struct {
 {{- range $rf := $rfs }}
+	{{- $field_name := $return_field_names.Add $rf.Name -}}
+	{{- $return_fields.Push $field_name -}}
 	{{- if and (or $rf.IsEnum $rf.IsSet) (not_nil $rf.Table) }}
-	{{ $rf.PascalName }} {{ $rf.Table.PascalName}}{{ $rf.Column.PascalName }}
+	{{ $field_name }} {{ $rf.Table.PascalName}}{{ $rf.Column.PascalName }}
 	{{- else }}
-	{{ $rf.PascalName }} {{ $rf.AdaptType }}
+	{{ $field_name }} {{ $rf.AdaptType }}
 	{{- end }}
 {{- end }}
 }
@@ -82,7 +86,7 @@ func {{ $func_name }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg 
 
 	// - Scan.
 	ret_ := new({{ $return_type }})
-	if err_ := row_.Scan({{ range $i, $rf := $rfs }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $rf.PascalName }}{{ end }}); err != nil {
+	if err_ := row_.Scan({{ range $i, $field_name := $return_fields }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $field_name }}{{ end }}); err != nil {
 		return nil, err
 	}
 
@@ -99,7 +103,7 @@ func {{ $func_name }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg 
 	ret_ := make([]*{{ $return_type }}, 0)
 	for rows_.Rows.Next() {
 		r_ := new({{ $return_type }})
-		if err_ := rows_.Rows.Scan({{ range $i, $rf := $rfs }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $rf.PascalName }}{{ end }}); err != nil {
+		if err_ := rows_.Rows.Scan({{ range $i, $field_name := $return_fields }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $field_name }}{{ end }}); err != nil {
 			return nil, err_
 		}
 		ret_ = append(ret_, r_)

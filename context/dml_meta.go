@@ -13,9 +13,8 @@ import (
 type ResultFieldMeta struct {
 	*ast.ResultField
 
-	// Field name
-	Name       string
-	PascalName string
+	// Field name, maybe contain non-identifier chars: "now()"
+	Name string
 
 	// Field type.
 	Type types.FieldType
@@ -42,18 +41,14 @@ func NewResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, er
 	}
 
 	// Determin the name.
-	name, err := resultFieldNameAsIdentifier(rf, false)
+	name, err := resultFieldName(rf, false)
 	if err != nil {
 		return nil, err
-	}
-	if rf.TableAsName.L != "" {
-		name = fmt.Sprintf("%s_%s", rf.TableAsName.L, name)
 	}
 
 	return &ResultFieldMeta{
 		ResultField: rf,
 		Name:        name,
-		PascalName:  utils.PascalCase(name),
 		Type:        rf.Column.FieldType,
 		AdaptType:   ctx.TypeAdapter.AdaptType(&rf.Column.FieldType),
 		Table:       table,
@@ -214,24 +209,6 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 			return nil, err
 		}
 		ret.ResultFields = append(ret.ResultFields, rfm)
-	}
-
-	// Resolve name conflicts in result fields.
-	names := make(map[string]*ResultFieldMeta)
-	for _, rfm := range ret.ResultFields {
-		name := rfm.Name
-		pascal_name := rfm.PascalName
-		for i := 1; ; i += 1 {
-			if _, ok := names[name]; !ok {
-				break
-			}
-			name = fmt.Sprintf("%s_%d", rfm.Name, i)
-			pascal_name = fmt.Sprintf("%s_%d", rfm.PascalName, i)
-		}
-
-		rfm.Name = name
-		rfm.PascalName = pascal_name
-		names[name] = rfm
 	}
 
 	// Extract table source meta.
@@ -413,9 +390,9 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, *Wildc
 			}
 
 			for j, rf := range rfs {
-				rf_name, err := resultFieldNameAsIdentifier(rf, true)
+				rf_name, err := resultFieldName(rf, true)
 				if err != nil {
-					return nil, nil, fmt.Errorf("%s resultFieldNameAsIdentifier for %+q[%d]: %s",
+					return nil, nil, fmt.Errorf("%s resultFieldName for %+q[%d]: %s",
 						err_prefix, table_name, j, err)
 				}
 				expan_parts = append(expan_parts, table_name+"."+rf_name)
@@ -439,9 +416,9 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, *Wildc
 				table_name = r_table_map[j]
 				rfs := table.GetResultFields()
 				for k, rf := range rfs {
-					rf_name, err := resultFieldNameAsIdentifier(rf, true)
+					rf_name, err := resultFieldName(rf, true)
 					if err != nil {
-						return nil, nil, fmt.Errorf("%s resultFieldNameAsIdentifier for %+q[%d]: %s",
+						return nil, nil, fmt.Errorf("%s resultFieldName for %+q[%d]: %s",
 							err_prefix, table_name, k, err)
 					}
 					expan_parts = append(expan_parts, table_name+"."+rf_name)
@@ -472,7 +449,7 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, *Wildc
 
 }
 
-func resultFieldNameAsIdentifier(rf *ast.ResultField, exact bool) (string, error) {
+func resultFieldName(rf *ast.ResultField, as_identifier bool) (string, error) {
 
 	rf_name := rf.ColumnAsName.L
 	if rf_name == "" {
@@ -481,18 +458,13 @@ func resultFieldNameAsIdentifier(rf *ast.ResultField, exact bool) (string, error
 	if rf_name == "" {
 		return "", fmt.Errorf("Empty result field name")
 	}
+	if !as_identifier {
+		return rf_name, nil
+	}
 	if utils.IsIdent(rf_name) {
 		return rf_name, nil
 	}
-	if exact {
-		return "", fmt.Errorf("%+q is not a valid identifier", rf_name)
-	} else {
-		rf_name1 := utils.FindIdent(rf_name)
-		if rf_name1 == "" {
-			return "", fmt.Errorf("Can't find a valid identifier in %+q", rf_name)
-		}
-		return rf_name1, nil
-	}
+	return "", fmt.Errorf("%+q is not a valid identifier", rf_name)
 
 }
 

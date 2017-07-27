@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"github.com/huangjunwen/JustSQL/context"
 	"github.com/huangjunwen/JustSQL/utils"
 	"reflect"
@@ -53,6 +54,43 @@ func pascalNoEmpty(s string) string {
 	return ret
 }
 
+// A set of unqiue pascal names.
+type UniqueNames struct {
+	Names map[string]int
+}
+
+func NewUniqueNames() *UniqueNames {
+	return &UniqueNames{
+		Names: make(map[string]int),
+	}
+}
+
+func (un *UniqueNames) Add(name string) string {
+	name = utils.PascalCase(name)
+	if name == "" {
+		name = "NoName"
+	}
+	ret := name
+	for i := 1; ; i += 1 {
+		if _, ok := un.Names[ret]; !ok {
+			un.Names[ret] = len(un.Names)
+			return ret
+		}
+		ret = fmt.Sprintf("%s%d", name, i)
+	}
+}
+
+type StringArr []string
+
+func NewStringArr() *StringArr {
+	return &StringArr{}
+}
+
+func (a *StringArr) Push(s string) string {
+	*a = append(*a, s)
+	return ""
+}
+
 func buildExtraFuncs(ctx *context.Context) template.FuncMap {
 
 	scopes := ctx.Scopes
@@ -68,6 +106,8 @@ func buildExtraFuncs(ctx *context.Context) template.FuncMap {
 		"placeholder":      placeholder,
 		"placeholder_list": placeholderList,
 		"pascal":           pascalNoEmpty,
+		"unique_names":     NewUniqueNames,
+		"string_arr":       NewStringArr,
 	}
 
 }
