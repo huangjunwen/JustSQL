@@ -79,7 +79,7 @@ func (db *EmbedDB) Execute(src string) ([]ast.RecordSet, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Execute(%+q): %s", src, err)
 	}
-	return db.Sess.Execute(src)
+	return ret, nil
 }
 
 // Execute some SQLs and Panic if error.

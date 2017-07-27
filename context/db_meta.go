@@ -78,7 +78,7 @@ func NewTableMeta(ctx *Context, table_info *model.TableInfo) (*TableMeta, error)
 		ret.Columns = append(ret.Columns, column_meta)
 		ret.columnByName[column_meta.Name] = column_meta
 
-		if column_meta.IsAutoInc {
+		if column_meta.IsAutoInc() {
 			if ret.autoIncColumn != nil {
 				panic(fmt.Errorf("Multiple auto increment columns found in table %q", ret.Name))
 			}
@@ -175,51 +175,47 @@ type ColumnMeta struct {
 	// Column field type.
 	Type types.FieldType
 
-	// Is it enum/set type?
-	IsEnum bool
-	IsSet  bool
-
-	// Element list if IsEnum == true or IsSet == true
-	Elems []string
-
-	// Flags of this column
-	IsNotNULL     bool
-	IsAutoInc     bool
-	IsOnUpdateNow bool
-
-	DefaultValue interface{}
-
 	// Go type to store this field.
 	AdaptType *TypeName
 }
 
 func NewColumnMeta(ctx *Context, column_info *model.ColumnInfo) (*ColumnMeta, error) {
-	ret := &ColumnMeta{
+	return &ColumnMeta{
 		ColumnInfo: column_info,
 		Name:       column_info.Name.L,
 		PascalName: utils.PascalCase(column_info.Name.L),
 		Offset:     column_info.Offset,
 		Type:       column_info.FieldType,
-	}
+		AdaptType:  ctx.TypeAdapter.AdaptType(&column_info.FieldType),
+	}, nil
+}
 
-	tp := &ret.Type
-	ret.AdaptType = ctx.TypeAdapter.AdaptType(tp)
+func (c *ColumnMeta) IsEnum() bool {
+	return c.Type.Tp == mysql.TypeEnum
+}
 
-	if tp.Tp == mysql.TypeEnum {
-		ret.IsEnum = true
-		ret.Elems = tp.Elems
-	} else if tp.Tp == mysql.TypeSet {
-		ret.IsSet = true
-		ret.Elems = tp.Elems
-	}
+func (c *ColumnMeta) IsSet() bool {
+	return c.Type.Tp == mysql.TypeSet
+}
 
-	ret.IsNotNULL = mysql.HasNotNullFlag(tp.Flag)
-	ret.IsAutoInc = mysql.HasAutoIncrementFlag(tp.Flag)
-	ret.IsOnUpdateNow = mysql.HasOnUpdateNowFlag(tp.Flag)
+func (c *ColumnMeta) Elems() []string {
+	return c.Type.Elems
+}
 
-	ret.DefaultValue = column_info.DefaultValue
+func (c *ColumnMeta) IsNotNULL() bool {
+	return mysql.HasNotNullFlag(c.Type.Flag)
+}
 
-	return ret, nil
+func (c *ColumnMeta) IsAutoInc() bool {
+	return mysql.HasAutoIncrementFlag(c.Type.Flag)
+}
+
+func (c *ColumnMeta) IsOnUpdateNow() bool {
+	return mysql.HasOnUpdateNowFlag(c.Type.Flag)
+}
+
+func (c *ColumnMeta) DefaultValue() interface{} {
+	return c.ColumnInfo.DefaultValue
 }
 
 // IndexMeta contains meta data of an index.
