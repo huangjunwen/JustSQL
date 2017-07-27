@@ -109,29 +109,38 @@ func NewSelectTableSourcesMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectTable
 			switch r := rs.(type) {
 			case *ast.TableSource:
 
+				var (
+					name       string
+					is_derived bool = false
+				)
 				// see github.com/pingcap/tidb/plan/resolve.go:handleTableSource
 				switch s := r.Source.(type) {
 				case *ast.TableName:
-					name := r.AsName.L
+					name = r.AsName.L
 					if name == "" {
 						name = ctx.UniqueTableName(s.Schema.L, s.Name.L)
 					}
-					if name == "" {
-						// Should not be here since it has been Compiled.
-						panic("Table name is empty")
-					}
-					ret.TableMap[name] = len(ret.Tables)
-					ret.Tables = append(ret.Tables, r)
 
 				default:
-					name := r.AsName.L
-					if name == "" {
-						// Should not be here since it has been Compiled.
-						panic("Derived table name is empty")
+					name = r.AsName.L
+					is_derived = true
+				}
+
+				if name == "" {
+					return fmt.Errorf("[bug?] No name for table source[%d]", len(ret.Tables))
+				}
+				if !is_derived {
+					if _, ok := ret.TableMap[name]; ok {
+						return fmt.Errorf("[bug?] Duplicate normal table name %+q", name)
+					}
+					ret.TableMap[name] = len(ret.Tables)
+				} else {
+					if _, ok := ret.DerivedTableMap[name]; ok {
+						return fmt.Errorf("[bug?] Duplicate derived table name %+q", name)
 					}
 					ret.DerivedTableMap[name] = len(ret.Tables)
-					ret.Tables = append(ret.Tables, r)
 				}
+				ret.Tables = append(ret.Tables, r)
 
 			case *ast.Join:
 				if err := collect(r); err != nil {
@@ -159,6 +168,7 @@ func NewSelectTableSourcesMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectTable
 // the result will be the combination of both.
 // see github.com/pingcap/tidb/plan/resolve.go:createResultFields
 func (s *SelectTableSourcesMeta) TableResultFields(table_name string) []*ast.ResultField {
+
 	tab_idx1, ok1 := s.TableMap[table_name]
 	tab_idx2, ok2 := s.DerivedTableMap[table_name]
 	if !ok1 && !ok2 {
@@ -172,6 +182,7 @@ func (s *SelectTableSourcesMeta) TableResultFields(table_name string) []*ast.Res
 		ret = append(ret, s.Tables[tab_idx2].Source.GetResultFields()...)
 	}
 	return ret
+
 }
 
 // SelectStmtMeta contains meta information of a SELECT statement.
