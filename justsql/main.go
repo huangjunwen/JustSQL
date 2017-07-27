@@ -234,10 +234,14 @@ func loadDDL() {
 			// Run it.
 			log.Infof("db.Execute(%q) ...", stmt_text)
 			if _, err := db.Execute(stmt_text); err != nil {
-				log.Fatalf("db.Execute(%q): %s", stmt_text, err)
+				log.Fatalf("db.Execute(): %s", err)
 			}
 		}
 
+	}
+
+	if err := ctx.ExtractDefaultDBMeta(); err != nil {
+		log.Fatalf("ctx.ExtractDefaultDBMeta(): %s", err)
 	}
 
 	log.Infof("DDL loaded")
@@ -246,10 +250,7 @@ func loadDDL() {
 
 func exportTables() {
 
-	db_meta, err := ctx.DBMeta()
-	if err != nil {
-		log.Fatalf("ctx.DBMeta: %s", err)
-	}
+	db_meta := ctx.DefaultDBMeta
 
 	for _, table_meta := range db_meta.Tables {
 

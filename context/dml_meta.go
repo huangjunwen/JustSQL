@@ -31,10 +31,7 @@ type ResultFieldMeta struct {
 
 func NewResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, error) {
 
-	db_meta, err := ctx.DBMeta()
-	if err != nil {
-		return nil, err
-	}
+	db_meta := ctx.DefaultDBMeta
 
 	// Is it from a real table?
 	var table *TableMeta = nil

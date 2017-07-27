@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	DEFAULT_DB_NAME  = "justsql"
-	PLACEHOLDER      = "?"
-	NAME_PLACEHOLDER = ":"
+	DEFAULT_default_db_name = "justsql"
+	PLACEHOLDER             = "?"
+	NAME_PLACEHOLDER        = ":"
 )
 
 // Runtime context.
@@ -16,8 +16,12 @@ type Context struct {
 	// The embeded db.
 	DB *EmbedDB
 
-	// Database name in embeded db. Currently JustSQL only support single database.
-	DBName string
+	// Default database name in embeded db.
+	DefaultDBName string
+
+	// Default database meta.
+	// NOTE: Call ExtractDefaultDBMeta before using this field.
+	DefaultDBMeta *DBMeta
 
 	// File scopes.
 	*Scopes
@@ -25,64 +29,69 @@ type Context struct {
 	// DB types and go types adpater.
 	*TypeAdapter
 
-	// Extracted meta data.
-	dbMeta *DBMeta
+	// SQL placeholders.
+	Placeholder     string
+	NamePlaceholder string
 }
 
-func NewContext(db_store_path, db_name string) (*Context, error) {
-	db, err := NewEmbedDB(db_store_path)
+func NewContext(store_path, default_db_name string) (*Context, error) {
+
+	db, err := NewEmbedDB(store_path)
 	if err != nil {
 		return nil, err
 	}
 
-	if db_name == "" {
-		db_name = DEFAULT_DB_NAME
+	if default_db_name == "" {
+		default_db_name = DEFAULT_default_db_name
 	}
-	db.MustExecute(fmt.Sprintf("DROP DATABASE IF EXISTS %s", db_name))
-	db.MustExecute(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", db_name))
-	db.MustExecute(fmt.Sprintf("USE %s", db_name))
+	db.MustExecute(fmt.Sprintf("DROP DATABASE IF EXISTS %s", default_db_name))
+	db.MustExecute(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", default_db_name))
+	db.MustExecute(fmt.Sprintf("USE %s", default_db_name))
 
 	scopes := NewScopes()
 	type_adapter := NewTypeAdapter(scopes)
 
 	return &Context{
-		DB:          db,
-		DBName:      db_name,
-		Scopes:      scopes,
-		TypeAdapter: type_adapter,
+		DB:              db,
+		DefaultDBName:   default_db_name,
+		Scopes:          scopes,
+		TypeAdapter:     type_adapter,
+		Placeholder:     PLACEHOLDER,
+		NamePlaceholder: NAME_PLACEHOLDER,
 	}, nil
 
 }
 
-func (ctx *Context) DBMeta() (*DBMeta, error) {
-	if ctx.dbMeta == nil {
-		if err := ctx.ExtractDBMeta(); err != nil {
-			return nil, err
-		}
-	}
-	return ctx.dbMeta, nil
-}
+// Extract default database meta into context.
+func (ctx *Context) ExtractDefaultDBMeta() error {
 
-// Extract database meta information into context.
-func (ctx *Context) ExtractDBMeta() error {
-	is := ctx.DB.Domain().InfoSchema()
-	db_info, ok := is.SchemaByName(model.NewCIStr(ctx.DBName))
-	if !ok {
-		return fmt.Errorf("Can't get DBInfo of %q", ctx.DBName)
-	}
-
-	db_meta, err := NewDBMeta(ctx, db_info)
+	db_meta, err := ctx.ExtractDBMeta(ctx.DefaultDBName)
 	if err != nil {
 		return err
 	}
-
-	ctx.dbMeta = db_meta
+	ctx.DefaultDBMeta = db_meta
 	return nil
+
 }
 
-func (ctx *Context) UniqueTableName(schema, table string) string {
-	if schema != "" && schema != ctx.DBName {
-		return schema + "." + table
+// Extract database meta information.
+func (ctx *Context) ExtractDBMeta(db_name string) (*DBMeta, error) {
+
+	is := ctx.DB.Domain().InfoSchema()
+	db_info, ok := is.SchemaByName(model.NewCIStr(db_name))
+	if !ok {
+		return nil, fmt.Errorf("Can't get DBInfo of %q", db_name)
 	}
-	return table
+
+	return NewDBMeta(ctx, db_info)
+
+}
+
+func (ctx *Context) UniqueTableName(db_name, table_name string) string {
+
+	if db_name != "" && db_name != ctx.DefaultDBName {
+		return db_name + "." + table_name
+	}
+	return table_name
+
 }
