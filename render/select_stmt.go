@@ -20,23 +20,36 @@ func init() {
 {{- $has_multi_arg := .Func.HasMultiArg -}}
 {{- $func_name := .Func.Name -}}
 {{- $rfs := .Stmt.ResultFields -}}
-{{- $return_type := printf "%sResult" .Func.Name -}}
-{{- $return_fields := string_arr -}}
-{{- $return_field_names := unique_names -}}
+{{- $result_name := printf "%sResult" .Func.Name -}}
+{{- $result_field_names := unique_names -}}
+{{- $result_fields_flatten := string_arr -}}
 {{- $return_one := eq .Func.Return "one" -}}
 
 {{/* =========================== */}}
 {{/*          main function      */}}
 {{/* =========================== */}}
 
-type {{ $return_type }} struct {
-{{- range $rf := $rfs }}
-	{{- $field_name := $return_field_names.Add $rf.Name -}}
-	{{- $return_fields.Push $field_name -}}
-	{{- if and (or $rf.IsEnum $rf.IsSet) (not_nil $rf.Table) }}
-	{{ $field_name }} {{ $rf.Table.PascalName}}{{ $rf.Column.PascalName }}
+type {{ $result_name }} struct {
+{{- range $i, $rf := $rfs -}}
+	{{/* whether this result field is in a normal table wildcard expansion */}}
+	{{- $wildcard_tbl_src_name := $.Wildcard.TableSourceName $i -}}
+	{{- $wildcard_tbl_is_normal := and ($.Stmt.Sources.Has $wildcard_tbl_src_name) (not ($.Stmt.Sources.HasDerived $wildcard_tbl_src_name)) -}}
+	{{- $wildcard_offset := $.Wildcard.Offset $i -}}
+
+	{{- if $wildcard_tbl_is_normal }}
+		{{- if eq $wildcard_offset 0 }}
+			{{- $result_field_names.Add $wildcard_tbl_src_name }}
+			{{ $result_field_names.Last }} {{ $rf.Table.PascalName }} // {{ $wildcard_tbl_src_name }}.*
+		{{- end }}
+		{{- $result_fields_flatten.Push (printf "%s.%s" $result_field_names.Last $rf.Column.PascalName) }}
 	{{- else }}
-	{{ $field_name }} {{ $rf.AdaptType }}
+		{{- $result_field_names.Add $rf.Name -}}
+		{{- if and (or $rf.IsEnum $rf.IsSet) (not_nil $rf.Table) }}
+			{{ $result_field_names.Last }} {{ $rf.Table.PascalName }}{{ $rf.Column.PascalName }}
+		{{- else }}
+			{{ $result_field_names.Last }} {{ $rf.AdaptType }}
+		{{- end }}
+		{{- $result_fields_flatten.Push $result_field_names.Last }}
 	{{- end }}
 {{- end }}
 }
@@ -45,7 +58,7 @@ const _{{ $func_name }}QueryTmpl = template.Must(template.New({{ printf "%q" .Fu
 ` + "`" + `{{ printf "%s" .Func.Query }}` + "`" + `))
 
 // Generated from: {{ printf "%+q" .Src }}
-func {{ $func_name }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg := .Func.Args }}, {{ $arg.Name}} {{ $arg.AdaptType }} {{ end }}) ({{ if $return_one }}*{{ $return_type }}{{ else }}[]*{{ $return_type }}{{ end }}, error) {
+func {{ $func_name }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg := .Func.Args }}, {{ $arg.Name}} {{ $arg.AdaptType }} {{ end }}) ({{ if $return_one }}*{{ $result_name }}{{ else }}[]*{{ $result_name }}{{ end }}, error) {
 
 	// - Dot object for template and query parameter.
 	dot_ := map[string]interface{}{
@@ -85,8 +98,8 @@ func {{ $func_name }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg 
 	}
 
 	// - Scan.
-	ret_ := new({{ $return_type }})
-	if err_ := row_.Scan({{ range $i, $field_name := $return_fields }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $field_name }}{{ end }}); err != nil {
+	ret_ := new({{ $result_name }})
+	if err_ := row_.Scan({{ range $i, $field := $result_fields_flatten }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $field }}{{ end }}); err != nil {
 		return nil, err
 	}
 
@@ -100,10 +113,10 @@ func {{ $func_name }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg 
 	defer rows_.Rows.Close()
 
 	// - Scan.
-	ret_ := make([]*{{ $return_type }}, 0)
+	ret_ := make([]*{{ $result_name }}, 0)
 	for rows_.Rows.Next() {
-		r_ := new({{ $return_type }})
-		if err_ := rows_.Rows.Scan({{ range $i, $field_name := $return_fields }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $field_name }}{{ end }}); err != nil {
+		r_ := new({{ $result_name }})
+		if err_ := rows_.Rows.Scan({{ range $i, $field := $result_fields_flatten }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $field }}{{ end }}); err != nil {
 			return nil, err_
 		}
 		ret_ = append(ret_, r_)

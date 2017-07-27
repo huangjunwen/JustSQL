@@ -57,6 +57,7 @@ func pascalNoEmpty(s string) string {
 // A set of unqiue pascal names.
 type UniqueNames struct {
 	Names map[string]int
+	Last  string
 }
 
 func NewUniqueNames() *UniqueNames {
@@ -74,7 +75,8 @@ func (un *UniqueNames) Add(name string) string {
 	for i := 1; ; i += 1 {
 		if _, ok := un.Names[ret]; !ok {
 			un.Names[ret] = len(un.Names)
-			return ret
+			un.Last = ret
+			return ""
 		}
 		ret = fmt.Sprintf("%s%d", name, i)
 	}

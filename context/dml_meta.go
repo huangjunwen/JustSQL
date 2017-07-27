@@ -181,6 +181,16 @@ func (s *SelectTableSourcesMeta) TableResultFields(table_name string) []*ast.Res
 
 }
 
+func (s *SelectTableSourcesMeta) Has(table_name string) bool {
+	_, ok := s.TableMap[table_name]
+	return ok
+}
+
+func (s *SelectTableSourcesMeta) HasDerived(table_name string) bool {
+	_, ok := s.DerivedTableMap[table_name]
+	return ok
+}
+
 // SelectStmtMeta contains meta information of a SELECT statement.
 type SelectStmtMeta struct {
 	*ast.SelectStmt
