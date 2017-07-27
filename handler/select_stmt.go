@@ -13,7 +13,7 @@ func handleSelectStmt(ctx *context.Context, obj interface{}) (interface{}, error
 		return nil, fmt.Errorf("handleSelectStmt: expect *ast.SelectStmt but got %T", obj)
 	}
 
-	select_stmt, err := context.ExpandWildcard(ctx, origin_select_stmt)
+	select_stmt, wildcard_expansions, err := context.ExpandWildcard(ctx, origin_select_stmt)
 	if err != nil {
 		return nil, err
 	}
@@ -29,9 +29,10 @@ func handleSelectStmt(ctx *context.Context, obj interface{}) (interface{}, error
 	}
 
 	return map[string]interface{}{
-		"Src":  origin_select_stmt.Text(),
-		"Stmt": select_stmt_meta,
-		"Func": fn,
+		"Src":      origin_select_stmt.Text(),
+		"Stmt":     select_stmt_meta,
+		"Func":     fn,
+		"Wildcard": wildcard_expansions,
 	}, nil
 
 }

@@ -129,6 +129,7 @@ func NewSelectTableSourcesMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectTable
 				if name == "" {
 					return fmt.Errorf("[bug?] No name for table source[%d]", len(ret.Tables))
 				}
+				// see https://github.com/pingcap/tidb/issues/3908
 				if !is_derived {
 					if _, ok := ret.TableMap[name]; ok {
 						return fmt.Errorf("[bug?] Duplicate normal table name %+q", name)
@@ -244,10 +245,95 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 
 }
 
+type WildcardExpansion struct {
+	// The table source's name.
+	TableSourceName string
+
+	// Portion of the expansion in result fields.
+	ResultFieldOffset int
+	ResultFieldNum    int
+}
+
+// WildcardExpansions contain information of a wildcard expansion.
+type WildcardExpansions struct {
+	Expansions []*WildcardExpansion
+
+	// Map index of result field -> index of Expansions, -1 means not in wildcard expansion.
+	resultFieldIndex []int
+}
+
+func (e *WildcardExpansions) Add(table_source_name string, result_field_offset int, result_field_num int) {
+
+	if result_field_offset < 0 {
+		panic(fmt.Errorf("result_field_offset < 0"))
+	}
+	if result_field_num <= 0 {
+		panic(fmt.Errorf("result_field_num <= 0"))
+	}
+	if e.Expansions == nil {
+		e.Expansions = make([]*WildcardExpansion, 0)
+	}
+	if e.resultFieldIndex == nil {
+		e.resultFieldIndex = make([]int, 0)
+	}
+
+	// Resize.
+	old_len := len(e.resultFieldIndex)
+	new_len := result_field_offset + result_field_num
+	for i := 0; i < new_len-old_len; i += 1 {
+		e.resultFieldIndex = append(e.resultFieldIndex, -1)
+	}
+
+	// Mark.
+	idx := len(e.Expansions)
+	for i := result_field_offset; i < result_field_offset+result_field_num; i += 1 {
+		if e.resultFieldIndex[i] != -1 {
+			panic(fmt.Errorf("e.resultFieldIndex[%d] == %d != -1", i, e.resultFieldIndex[i]))
+		}
+		e.resultFieldIndex[i] = idx
+	}
+	e.Expansions = append(e.Expansions, &WildcardExpansion{
+		TableSourceName:   table_source_name,
+		ResultFieldOffset: result_field_offset,
+		ResultFieldNum:    result_field_num,
+	})
+
+}
+
+// Return the wildcard table source name of the i-th result field or "" if the result
+// field is not from a wildcard expansion.
+func (e *WildcardExpansions) TableSourceName(i int) string {
+
+	if i < 0 || i >= len(e.resultFieldIndex) {
+		return ""
+	}
+	idx := e.resultFieldIndex[i]
+	if idx == -1 {
+		return ""
+	}
+	return e.Expansions[idx].TableSourceName
+
+}
+
+// Return the offset inside one wildcard of the i-th result field or -1 if the result
+// field is not from a wildcard expansion.
+func (e *WildcardExpansions) Offset(i int) int {
+
+	if i < 0 || i >= len(e.resultFieldIndex) {
+		return -1
+	}
+	idx := e.resultFieldIndex[i]
+	if idx == -1 {
+		return -1
+	}
+	return i - e.Expansions[idx].ResultFieldOffset
+
+}
+
 // This function expand all wildcards ("*") in a SELECT statement and return
 // an new equivalent one. This is useful since "SELECT * ..." may lead to
 // unpredictable error when table is altered.
-func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, error) {
+func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, *WildcardExpansions, error) {
 
 	// Check wildcard.
 	has_wildcard := false
@@ -258,7 +344,7 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, error)
 		}
 	}
 	if !has_wildcard {
-		return stmt, nil
+		return stmt, nil, nil
 	}
 
 	db := ctx.DB
@@ -267,26 +353,30 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, error)
 	// Re-parse and re-compile. Since we need Offset of wildcards which
 	// needs to be re-calculated.
 	if stmts, err := db.Parse(origin); err != nil {
-		return nil, err
+		return nil, nil, err
 	} else {
 		stmt = stmts[0].(*ast.SelectStmt)
 		if _, err := db.Compile(stmt); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	// Extract table source meta.
 	sources, err := NewSelectTableSourcesMeta(ctx, stmt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	expansions := new(WildcardExpansions)
 
 	// Iter fields and replace all wildcards.
 	offset := 0
 	parts := make([]string, 0)
+	result_field_offset := 0
 	for i, f := range stmt.Fields.Fields {
 		// Not a wildcard field.
 		if f.WildCard == nil {
+			result_field_offset += 1
 			continue
 		}
 
@@ -304,7 +394,7 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, error)
 		}
 
 		if !strings.HasPrefix(origin[f.Offset:], field_text) {
-			return nil, fmt.Errorf("%s strings.HasPrefix(%+q, %+q) == false", err_prefix,
+			return nil, nil, fmt.Errorf("%s strings.HasPrefix(%+q, %+q) == false", err_prefix,
 				origin[f.Offset:], field_text)
 		}
 
@@ -312,7 +402,7 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, error)
 		offset = f.Offset + len(field_text)
 
 		// Expand wildcard.
-		expan := []string{}
+		expan_parts := []string{}
 
 		// Qualified wildcard ("[db.]tbl.*")
 		if table_name != "" {
@@ -325,11 +415,14 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, error)
 			for j, rf := range rfs {
 				rf_name, err := resultFieldNameAsIdentifier(rf, true)
 				if err != nil {
-					return nil, fmt.Errorf("%s resultFieldNameAsIdentifier for %+q[%d]: %s",
+					return nil, nil, fmt.Errorf("%s resultFieldNameAsIdentifier for %+q[%d]: %s",
 						err_prefix, table_name, j, err)
 				}
-				expan = append(expan, table_name+"."+rf_name)
+				expan_parts = append(expan_parts, table_name+"."+rf_name)
 			}
+
+			expansions.Add(table_name, result_field_offset, len(rfs))
+			result_field_offset += len(rfs)
 
 		} else {
 
@@ -344,18 +437,21 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, error)
 
 			for j, table := range sources.Tables {
 				table_name = r_table_map[j]
-				for k, rf := range table.GetResultFields() {
+				rfs := table.GetResultFields()
+				for k, rf := range rfs {
 					rf_name, err := resultFieldNameAsIdentifier(rf, true)
 					if err != nil {
-						return nil, fmt.Errorf("%s resultFieldNameAsIdentifier for %+q[%d]: %s",
+						return nil, nil, fmt.Errorf("%s resultFieldNameAsIdentifier for %+q[%d]: %s",
 							err_prefix, table_name, k, err)
 					}
-					expan = append(expan, table_name+"."+rf_name)
+					expan_parts = append(expan_parts, table_name+"."+rf_name)
 				}
+				expansions.Add(table_name, result_field_offset, len(rfs))
+				result_field_offset += len(rfs)
 			}
 		}
 
-		parts = append(parts, strings.Join(expan, ", "))
+		parts = append(parts, strings.Join(expan_parts, ", "))
 
 	}
 
@@ -364,15 +460,15 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, error)
 
 	// Second-re-parse and re-compile.
 	if stmts, err := db.Parse(text); err != nil {
-		return nil, err
+		return nil, nil, err
 	} else {
 		stmt = stmts[0].(*ast.SelectStmt)
 		if _, err := db.Compile(stmt); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
-	return stmt, nil
+	return stmt, expansions, nil
 
 }
 
