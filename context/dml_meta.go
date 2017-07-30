@@ -65,25 +65,20 @@ func (rf *ResultFieldMeta) IsSet() bool {
 	return rf.Type.Tp == mysql.TypeSet
 }
 
-// SelectTableSourcesMeta contains meta information of the 'FROM' part
-// of SELECT statment.
-type SelectTableSourcesMeta struct {
+// TableRefsMeta contains meta information table refs (table sources).
+type TableRefsMeta struct {
 	// The same as in github.com/pingcap/tidb/plan/resolve.go:resolverContext
-	// NOTE: normal table names (alias) can not have same names, derived table
-	// alias names can not have same names, but normal table and derived table
+	// NOTE: normal table names (alias) can not have same names; derived table
+	// alias names can not have same names; but normal table and derived table
 	// can have same names.
 	Tables          []*ast.TableSource
 	TableMap        map[string]int
 	DerivedTableMap map[string]int
 }
 
-func NewSelectTableSourcesMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectTableSourcesMeta, error) {
+func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, error) {
 
-	if err := ensureSelectStmtCompiled(ctx, stmt); err != nil {
-		return nil, err
-	}
-
-	ret := &SelectTableSourcesMeta{
+	ret := &TableRefsMeta{
 		Tables:          make([]*ast.TableSource, 0),
 		TableMap:        make(map[string]int),
 		DerivedTableMap: make(map[string]int),
@@ -151,7 +146,7 @@ func NewSelectTableSourcesMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectTable
 		return nil
 	}
 
-	if err := collect(stmt.From.TableRefs); err != nil {
+	if err := collect(refs.TableRefs); err != nil {
 		return nil, err
 	}
 
@@ -163,7 +158,7 @@ func NewSelectTableSourcesMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectTable
 // NOTE: if table_name is both normal table name and derived table name,
 // the result will be the combination of both.
 // see github.com/pingcap/tidb/plan/resolve.go:createResultFields
-func (s *SelectTableSourcesMeta) TableResultFields(table_name string) []*ast.ResultField {
+func (s *TableRefsMeta) TableResultFields(table_name string) []*ast.ResultField {
 
 	tab_idx1, ok1 := s.TableMap[table_name]
 	tab_idx2, ok2 := s.DerivedTableMap[table_name]
@@ -181,12 +176,12 @@ func (s *SelectTableSourcesMeta) TableResultFields(table_name string) []*ast.Res
 
 }
 
-func (s *SelectTableSourcesMeta) Has(table_name string) bool {
+func (s *TableRefsMeta) Has(table_name string) bool {
 	_, ok := s.TableMap[table_name]
 	return ok
 }
 
-func (s *SelectTableSourcesMeta) HasDerived(table_name string) bool {
+func (s *TableRefsMeta) HasDerived(table_name string) bool {
 	_, ok := s.DerivedTableMap[table_name]
 	return ok
 }
@@ -197,7 +192,7 @@ type SelectStmtMeta struct {
 
 	ResultFields []*ResultFieldMeta
 
-	Sources *SelectTableSourcesMeta
+	TableRefs *TableRefsMeta
 }
 
 func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, error) {
@@ -221,11 +216,11 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 		ret.ResultFields = append(ret.ResultFields, rfm)
 	}
 
-	// Extract table source meta.
-	if sources, err := NewSelectTableSourcesMeta(ctx, stmt); err != nil {
+	// Extract table refs meta.
+	if refs, err := NewTableRefsMeta(ctx, stmt.From); err != nil {
 		return nil, err
 	} else {
-		ret.Sources = sources
+		ret.TableRefs = refs
 	}
 
 	return ret, nil
@@ -349,7 +344,7 @@ func ExpandWildcard(ctx *Context, stmt *ast.SelectStmt) (*ast.SelectStmt, *Wildc
 	}
 
 	// Extract table source meta.
-	sources, err := NewSelectTableSourcesMeta(ctx, stmt)
+	sources, err := NewTableRefsMeta(ctx, stmt.From)
 	if err != nil {
 		return nil, nil, err
 	}
