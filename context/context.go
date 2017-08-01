@@ -6,27 +6,26 @@ import (
 )
 
 const (
-	DEFAULT_default_db_name = "justsql"
-	PLACEHOLDER             = "?"
-	NAME_PLACEHOLDER        = ":"
+	DefaultDBName          = "justsql"
+	DefaultPlaceholder     = "?"
+	DefaultNamePlaceholder = ":"
 )
 
-// Runtime context.
+// Context contains runtime information of justsql.
 type Context struct {
 	// The embeded db.
 	DB *EmbedDB
 
 	// Default database name in embeded db.
-	DefaultDBName string
+	DBName string
 
-	// Default database meta.
-	// NOTE: Call ExtractDefaultDBMeta before using this field.
-	DefaultDBMeta *DBMeta
+	// Database name -> cached DBMeta
+	CachedDBMeta map[string]*DBMeta
 
 	// File scopes.
 	*Scopes
 
-	// DB types and go types adpater.
+	// DB types and go types adapter.
 	*TypeAdapter
 
 	// SQL placeholders.
@@ -34,64 +33,69 @@ type Context struct {
 	NamePlaceholder string
 }
 
-func NewContext(store_path, default_db_name string) (*Context, error) {
+// NewContext create new Context.
+func NewContext(storePath, dbName string) (*Context, error) {
 
-	db, err := NewEmbedDB(store_path)
+	db, err := NewEmbedDB(storePath)
 	if err != nil {
 		return nil, err
 	}
 
-	if default_db_name == "" {
-		default_db_name = DEFAULT_default_db_name
+	if dbName == "" {
+		dbName = DefaultDBName
 	}
-	db.MustExecute(fmt.Sprintf("DROP DATABASE IF EXISTS %s", default_db_name))
-	db.MustExecute(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", default_db_name))
-	db.MustExecute(fmt.Sprintf("USE %s", default_db_name))
+	db.MustExecute(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+	db.MustExecute(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName))
+	db.MustExecute(fmt.Sprintf("USE %s", dbName))
 
 	scopes := NewScopes()
-	type_adapter := NewTypeAdapter(scopes)
+	typeAdapter := NewTypeAdapter(scopes)
 
 	return &Context{
 		DB:              db,
-		DefaultDBName:   default_db_name,
+		DBName:          dbName,
+		CachedDBMeta:    make(map[string]*DBMeta),
 		Scopes:          scopes,
-		TypeAdapter:     type_adapter,
-		Placeholder:     PLACEHOLDER,
-		NamePlaceholder: NAME_PLACEHOLDER,
+		TypeAdapter:     typeAdapter,
+		Placeholder:     DefaultPlaceholder,
+		NamePlaceholder: DefaultNamePlaceholder,
 	}, nil
 
 }
 
-// Extract default database meta into context.
-func (ctx *Context) ExtractDefaultDBMeta() error {
-
-	db_meta, err := ctx.ExtractDBMeta(ctx.DefaultDBName)
-	if err != nil {
-		return err
-	}
-	ctx.DefaultDBMeta = db_meta
-	return nil
-
+// ClearCachedDBMeta clears all cached DBMeta.
+func (ctx *Context) ClearCachedDBMeta() {
+	ctx.CachedDBMeta = make(map[string]*DBMeta)
 }
 
-// Extract database meta information.
-func (ctx *Context) ExtractDBMeta(db_name string) (*DBMeta, error) {
+// GetDBMeta get DBMeta of the given db name or use cached one.
+func (ctx *Context) GetDBMeta(dbName string) (*DBMeta, error) {
 
+	if ret, ok := ctx.CachedDBMeta[dbName]; ok {
+		return ret, nil
+	}
 	is := ctx.DB.Domain().InfoSchema()
-	db_info, ok := is.SchemaByName(model.NewCIStr(db_name))
+	dbInfo, ok := is.SchemaByName(model.NewCIStr(dbName))
 	if !ok {
-		return nil, fmt.Errorf("Can't get DBInfo of %q", db_name)
+		return nil, fmt.Errorf("Can't get DBInfo of %q", dbName)
 	}
 
-	return NewDBMeta(ctx, db_info)
+	dbMeta, err := NewDBMeta(ctx, dbInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx.CachedDBMeta[dbName] = dbMeta
+	return dbMeta, nil
 
 }
 
-func (ctx *Context) UniqueTableName(db_name, table_name string) string {
+// UniqueTableName == github.com/pingcap/tidb/plan/resolver.go nameResolver.tableUniqueName
+func (ctx *Context) UniqueTableName(dbName, tableName string) string {
 
-	if db_name != "" && db_name != ctx.DefaultDBName {
-		return db_name + "." + table_name
+	if dbName != "" && dbName != ctx.DBName {
+		return dbName + "." + tableName
 	}
-	return table_name
+	return tableName
 
 }

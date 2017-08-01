@@ -30,13 +30,15 @@ type ResultFieldMeta struct {
 
 func NewResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, error) {
 
-	db_meta := ctx.DefaultDBMeta
-
 	// Is it from a real table?
 	var table *TableMeta = nil
 	var column *ColumnMeta = nil
-	table, _ = db_meta.Tables[rf.Table.Name.L]
-	if table != nil {
+	if rf.Table.Name.L != "" {
+		db_meta, err := ctx.GetDBMeta(rf.DBName.L)
+		if err != nil {
+			return nil, err
+		}
+		table = db_meta.Tables[rf.Table.Name.L]
 		column = table.Columns[rf.Column.Offset]
 	}
 

@@ -14,7 +14,6 @@ func handleTableMeta(ctx *context.Context, obj interface{}) (interface{}, error)
 
 	// The 'dot' object to render TableMeta
 	return map[string]interface{}{
-		"DB":    ctx.DefaultDBMeta,
 		"Table": table_meta,
 	}, nil
 }

@@ -240,8 +240,8 @@ func loadDDL() {
 
 	}
 
-	if err := ctx.ExtractDefaultDBMeta(); err != nil {
-		log.Fatalf("ctx.ExtractDefaultDBMeta(): %s", err)
+	if _, err := ctx.GetDBMeta(ctx.DBName); err != nil {
+		log.Fatalf("ctx.GetDBMeta(%+q): %s", ctx.DBName, err)
 	}
 
 	log.Infof("DDL loaded")
@@ -250,7 +250,10 @@ func loadDDL() {
 
 func exportTables() {
 
-	db_meta := ctx.DefaultDBMeta
+	db_meta, err := ctx.GetDBMeta(ctx.DBName)
+	if err != nil {
+		log.Fatalf("ctx.GetDBMeta(%+q): %s", ctx.DBName, err)
+	}
 
 	for _, table_meta := range db_meta.Tables {
 

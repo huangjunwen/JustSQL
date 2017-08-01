@@ -89,7 +89,7 @@ func NewDMLFunc(ctx *context.Context, node ast.DMLNode) (*DMLFunc, error) {
 			if i >= len(comments) {
 				return nil, fmt.Errorf("bind: %q missing enclosure", a.Name)
 			}
-			parts = append(parts, fmt.Sprintf("%s%s", context.NAME_PLACEHOLDER, a.Name))
+			parts = append(parts, fmt.Sprintf("%s%s", ctx.NamePlaceholder, a.Name))
 			comment = comments[i]
 
 		default:

@@ -29,21 +29,6 @@ func columnNameList(cols []*context.ColumnMeta) string {
 	return strings.Join(parts, ", ")
 }
 
-func placeholder() string {
-	return context.PLACEHOLDER
-}
-
-// Return '?, ?, ?, ...'
-func placeholderList(n int) string {
-	if n <= 0 {
-		return ""
-	} else if n == 1 {
-		return placeholder()
-	}
-	s := strings.Repeat(placeholder()+", ", n)
-	return s[:len(s)-2]
-}
-
 // Convert a string to its pascal case. If the string is empty ("")
 // it will return "Empty_"
 func pascalNoEmpty(s string) string {
@@ -99,6 +84,21 @@ func buildExtraFuncs(ctx *context.Context) template.FuncMap {
 
 	imp := func(pkg_path string) *context.PkgName {
 		return scopes.CreatePkgName(pkg_path)
+	}
+
+	placeholder := func() string {
+		return ctx.Placeholder
+	}
+
+	// Return '?, ?, ?, ...'
+	placeholderList := func(n int) string {
+		if n <= 0 {
+			return ""
+		} else if n == 1 {
+			return placeholder()
+		}
+		s := strings.Repeat(placeholder()+", ", n)
+		return s[:len(s)-2]
 	}
 
 	return template.FuncMap{
