@@ -13,26 +13,26 @@ func handleSelectStmt(ctx *context.Context, obj interface{}) (interface{}, error
 		return nil, fmt.Errorf("handleSelectStmt: expect *ast.SelectStmt but got %T", obj)
 	}
 
-	select_stmt, wildcard_expansions, err := context.ExpandWildcard(ctx, origin_select_stmt)
+	origin_select_stmt_meta, err := context.NewSelectStmtMeta(ctx, origin_select_stmt)
 	if err != nil {
 		return nil, err
 	}
 
-	fn, err := NewDMLFunc(ctx, select_stmt)
+	select_stmt_meta, err := origin_select_stmt_meta.ExpandWildcard(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	select_stmt_meta, err := context.NewSelectStmtMeta(ctx, select_stmt)
+	fn, err := NewDMLFunc(ctx, select_stmt_meta.SelectStmt)
 	if err != nil {
 		return nil, err
 	}
 
 	return map[string]interface{}{
-		"Src":      origin_select_stmt.Text(),
-		"Stmt":     select_stmt_meta,
-		"Func":     fn,
-		"Wildcard": wildcard_expansions,
+		//"Src":        origin_select_stmt.Text(),
+		"OriginStmt": origin_select_stmt_meta,
+		"Stmt":       select_stmt_meta,
+		"Func":       fn,
 	}, nil
 
 }
