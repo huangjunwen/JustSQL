@@ -20,6 +20,10 @@ func notNil(v interface{}) (res bool) {
 	return
 }
 
+func splitLines(s string) []string {
+	return strings.Split(s, "\n")
+}
+
 // Return 'col1, col2, col3, ...'
 func columnNameList(cols []*context.ColumnMeta) string {
 	parts := make([]string, 0, len(cols))
@@ -104,6 +108,7 @@ func buildExtraFuncs(ctx *context.Context) template.FuncMap {
 	return template.FuncMap{
 		"imp":              imp,
 		"not_nil":          notNil,
+		"split_lines":      splitLines,
 		"column_name_list": columnNameList,
 		"placeholder":      placeholder,
 		"placeholder_list": placeholderList,

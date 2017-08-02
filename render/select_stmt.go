@@ -29,6 +29,7 @@ func init() {
 {{/*          main function      */}}
 {{/* =========================== */}}
 
+// {{ $returnType }} is the result type of {{ $funcName }}.
 type {{ $returnType }} struct {
 {{- range $i, $rf := $rfs -}}
 	{{/* whether this result field is in a normal table wildcard expansion */}}
@@ -55,10 +56,18 @@ type {{ $returnType }} struct {
 {{- end }}
 }
 
-const _{{ $funcName }}QueryTmpl = template.Must(template.New({{ printf "%q" $funcName }}).Parse(
-` + "`" + `{{ printf "%s" .Func.Query }}` + "`" + `))
+const _{{ $funcName }}QueryTmpl = template.Must(template.New({{ printf "%q" $funcName }}).Parse("" +
+{{- range $line := split_lines .Func.Query }}
+	"{{ printf "%s" $line }} " +
+{{- end }}""))
 
-// Generated from: {{ printf "%+q" .OriginStmt.SelectStmt.Text }}
+// {{ $funcName }} is generated from:
+//
+{{- range $line := split_lines .OriginStmt.SelectStmt.Text }}
+{{- if ne (len $line) 0 }}
+//    {{ printf "%s" $line }}
+{{- end }}
+{{- end }}
 func {{ $funcName }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg := .Func.Args }}, {{ $arg.Name}} {{ $arg.AdaptType }} {{ end }}) ({{ if $returnOne }}*{{ $returnType }}{{ else }}[]*{{ $returnType }}{{ end }}, error) {
 
 	// - Dot object for template and query parameter.
