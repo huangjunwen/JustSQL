@@ -23,19 +23,19 @@ type DBMeta struct {
 	Tables map[string]*TableMeta
 }
 
-func NewDBMeta(ctx *Context, db_info *model.DBInfo) (*DBMeta, error) {
+func NewDBMeta(ctx *Context, dbInfo *model.DBInfo) (*DBMeta, error) {
 	ret := &DBMeta{
-		DBInfo:     db_info,
-		Name:       db_info.Name.L,
-		PascalName: utils.PascalCase(db_info.Name.L),
+		DBInfo:     dbInfo,
+		Name:       dbInfo.Name.L,
+		PascalName: utils.PascalCase(dbInfo.Name.L),
 		Tables:     make(map[string]*TableMeta),
 	}
-	for _, table_info := range db_info.Tables {
-		table_meta, err := NewTableMeta(ctx, table_info)
+	for _, tableInfo := range dbInfo.Tables {
+		tableMeta, err := NewTableMeta(ctx, tableInfo)
 		if err != nil {
 			return nil, err
 		}
-		ret.Tables[table_meta.Name] = table_meta
+		ret.Tables[tableMeta.Name] = tableMeta
 	}
 	return ret, nil
 }
@@ -59,58 +59,58 @@ type TableMeta struct {
 	columnByName map[string]*ColumnMeta
 }
 
-func NewTableMeta(ctx *Context, table_info *model.TableInfo) (*TableMeta, error) {
+func NewTableMeta(ctx *Context, tableInfo *model.TableInfo) (*TableMeta, error) {
 	ret := &TableMeta{
-		TableInfo:    table_info,
-		Name:         table_info.Name.L,
-		PascalName:   utils.PascalCase(table_info.Name.L),
-		Columns:      make([]*ColumnMeta, 0, len(table_info.Columns)),
-		Indices:      make([]*IndexMeta, 0, len(table_info.Indices)),
-		ForeignKeys:  make([]*FKMeta, 0, len(table_info.ForeignKeys)),
+		TableInfo:    tableInfo,
+		Name:         tableInfo.Name.L,
+		PascalName:   utils.PascalCase(tableInfo.Name.L),
+		Columns:      make([]*ColumnMeta, 0, len(tableInfo.Columns)),
+		Indices:      make([]*IndexMeta, 0, len(tableInfo.Indices)),
+		ForeignKeys:  make([]*FKMeta, 0, len(tableInfo.ForeignKeys)),
 		columnByName: make(map[string]*ColumnMeta),
 	}
 
-	for _, column_info := range table_info.Columns {
-		column_meta, err := NewColumnMeta(ctx, column_info)
+	for _, columnInfo := range tableInfo.Columns {
+		columnMeta, err := NewColumnMeta(ctx, columnInfo)
 		if err != nil {
 			return nil, err
 		}
-		ret.Columns = append(ret.Columns, column_meta)
-		ret.columnByName[column_meta.Name] = column_meta
+		ret.Columns = append(ret.Columns, columnMeta)
+		ret.columnByName[columnMeta.Name] = columnMeta
 
-		if column_meta.IsAutoInc() {
+		if columnMeta.IsAutoInc() {
 			if ret.autoIncColumn != nil {
 				panic(fmt.Errorf("Multiple auto increment columns found in table %q", ret.Name))
 			}
-			ret.autoIncColumn = column_meta
+			ret.autoIncColumn = columnMeta
 		}
 	}
 
-	if index_meta := NewIndexMetaFromPKHandler(ctx, table_info); index_meta != nil {
-		ret.Indices = append(ret.Indices, index_meta)
-		ret.primaryIndex = index_meta
+	if indexMeta := NewIndexMetaFromPKHandler(ctx, tableInfo); indexMeta != nil {
+		ret.Indices = append(ret.Indices, indexMeta)
+		ret.primaryIndex = indexMeta
 	}
 
-	for _, index_info := range table_info.Indices {
-		index_meta, err := NewIndexMeta(ctx, index_info)
+	for _, indexInfo := range tableInfo.Indices {
+		indexMeta, err := NewIndexMeta(ctx, indexInfo)
 		if err != nil {
 			return nil, err
 		}
-		ret.Indices = append(ret.Indices, index_meta)
-		if index_meta.Primary {
+		ret.Indices = append(ret.Indices, indexMeta)
+		if indexMeta.Primary {
 			if ret.primaryIndex != nil {
 				panic(fmt.Errorf("Multiple primary index found in table %q", ret.Name))
 			}
-			ret.primaryIndex = index_meta
+			ret.primaryIndex = indexMeta
 		}
 	}
 
-	for _, fk_info := range table_info.ForeignKeys {
-		fk_meta, err := NewFKMeta(ctx, fk_info)
+	for _, fkInfo := range tableInfo.ForeignKeys {
+		fkMeta, err := NewFKMeta(ctx, fkInfo)
 		if err != nil {
 			return nil, err
 		}
-		ret.ForeignKeys = append(ret.ForeignKeys, fk_meta)
+		ret.ForeignKeys = append(ret.ForeignKeys, fkMeta)
 	}
 
 	return ret, nil
@@ -179,14 +179,14 @@ type ColumnMeta struct {
 	AdaptType *TypeName
 }
 
-func NewColumnMeta(ctx *Context, column_info *model.ColumnInfo) (*ColumnMeta, error) {
+func NewColumnMeta(ctx *Context, columnInfo *model.ColumnInfo) (*ColumnMeta, error) {
 	return &ColumnMeta{
-		ColumnInfo: column_info,
-		Name:       column_info.Name.L,
-		PascalName: utils.PascalCase(column_info.Name.L),
-		Offset:     column_info.Offset,
-		Type:       column_info.FieldType,
-		AdaptType:  ctx.TypeAdapter.AdaptType(&column_info.FieldType),
+		ColumnInfo: columnInfo,
+		Name:       columnInfo.Name.L,
+		PascalName: utils.PascalCase(columnInfo.Name.L),
+		Offset:     columnInfo.Offset,
+		Type:       columnInfo.FieldType,
+		AdaptType:  ctx.TypeAdapter.AdaptType(&columnInfo.FieldType),
 	}, nil
 }
 
@@ -230,32 +230,32 @@ type IndexMeta struct {
 	ColumnIndices []int
 }
 
-func NewIndexMeta(ctx *Context, index_info *model.IndexInfo) (*IndexMeta, error) {
+func NewIndexMeta(ctx *Context, indexInfo *model.IndexInfo) (*IndexMeta, error) {
 	ret := &IndexMeta{
-		IndexInfo:     index_info,
-		Name:          index_info.Name.L,
-		PascalName:    utils.PascalCase(index_info.Name.L),
-		Unique:        index_info.Unique,
-		Primary:       index_info.Primary,
-		ColumnIndices: make([]int, 0, len(index_info.Columns)),
+		IndexInfo:     indexInfo,
+		Name:          indexInfo.Name.L,
+		PascalName:    utils.PascalCase(indexInfo.Name.L),
+		Unique:        indexInfo.Unique,
+		Primary:       indexInfo.Primary,
+		ColumnIndices: make([]int, 0, len(indexInfo.Columns)),
 	}
-	for _, column := range index_info.Columns {
+	for _, column := range indexInfo.Columns {
 		ret.ColumnIndices = append(ret.ColumnIndices, column.Offset)
 	}
 	return ret, nil
 }
 
 // see: https://github.com/pingcap/tidb/issues/3746
-func NewIndexMetaFromPKHandler(ctx *Context, table_info *model.TableInfo) *IndexMeta {
-	if !table_info.PKIsHandle {
+func NewIndexMetaFromPKHandler(ctx *Context, tableInfo *model.TableInfo) *IndexMeta {
+	if !tableInfo.PKIsHandle {
 		return nil
 	}
-	column_info := table_info.GetPkColInfo()
+	columnInfo := tableInfo.GetPkColInfo()
 	return &IndexMeta{
 		Name:          "primary",
 		Unique:        true,
 		Primary:       true,
-		ColumnIndices: []int{column_info.Offset},
+		ColumnIndices: []int{columnInfo.Offset},
 	}
 }
 
@@ -271,19 +271,19 @@ type FKMeta struct {
 	RefColNames  []string
 }
 
-func NewFKMeta(ctx *Context, fk_info *model.FKInfo) (*FKMeta, error) {
+func NewFKMeta(ctx *Context, fkInfo *model.FKInfo) (*FKMeta, error) {
 	ret := &FKMeta{
-		Name:         fk_info.Name.L,
-		PascalName:   utils.PascalCase(fk_info.Name.L),
-		FKInfo:       fk_info,
-		ColNames:     make([]string, 0, len(fk_info.Cols)),
-		RefTableName: fk_info.RefTable.L,
-		RefColNames:  make([]string, 0, len(fk_info.RefCols)),
+		Name:         fkInfo.Name.L,
+		PascalName:   utils.PascalCase(fkInfo.Name.L),
+		FKInfo:       fkInfo,
+		ColNames:     make([]string, 0, len(fkInfo.Cols)),
+		RefTableName: fkInfo.RefTable.L,
+		RefColNames:  make([]string, 0, len(fkInfo.RefCols)),
 	}
-	for _, col := range fk_info.Cols {
+	for _, col := range fkInfo.Cols {
 		ret.ColNames = append(ret.ColNames, col.L)
 	}
-	for _, refcol := range fk_info.RefCols {
+	for _, refcol := range fkInfo.RefCols {
 		ret.RefColNames = append(ret.RefColNames, refcol.L)
 	}
 	return ret, nil

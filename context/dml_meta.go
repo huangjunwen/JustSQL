@@ -33,6 +33,8 @@ func NewResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, er
 	// Is it from a real table?
 	var table *TableMeta = nil
 	var column *ColumnMeta = nil
+
+	// Real TableInfo has name.
 	if rf.Table.Name.L != "" {
 		db_meta, err := ctx.GetDBMeta(rf.DBName.L)
 		if err != nil {
