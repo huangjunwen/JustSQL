@@ -16,7 +16,7 @@ type EmbedDB struct {
 	Sess  tidb.Session
 }
 
-func NewEmbedDB(store_path string) (*EmbedDB, error) {
+func NewEmbedDB(storePath string) (*EmbedDB, error) {
 	var (
 		store kv.Storage
 		sess  tidb.Session
@@ -24,11 +24,11 @@ func NewEmbedDB(store_path string) (*EmbedDB, error) {
 	)
 
 	// Use memory store by default
-	if store_path == "" {
-		store_path = tidb.EngineGoLevelDBMemory
+	if storePath == "" {
+		storePath = tidb.EngineGoLevelDBMemory
 	}
 
-	if store, err = tidb.NewStore(store_path); err != nil {
+	if store, err = tidb.NewStore(storePath); err != nil {
 		return nil, err
 	}
 	if _, err = tidb.BootstrapSession(store); err != nil {

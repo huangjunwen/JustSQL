@@ -5,13 +5,13 @@ import (
 	"testing"
 )
 
-func testCreateTypeNameFromSpec(t *testing.T, scopes *Scopes, type_string string, expect string) {
-	tn := scopes.CreateTypeNameFromSpec(type_string)
+func testCreateTypeNameFromSpec(t *testing.T, scopes *Scopes, typeString string, expect string) {
+	tn := scopes.CreateTypeNameFromSpec(typeString)
 	fmt.Printf("%q:\n\texpect=%q\n\tresult=%q %#v\n",
-		type_string, expect, tn, tn)
+		typeString, expect, tn, tn)
 
 	if expect != tn.String() {
-		t.Errorf("%q: result != expect\n", type_string)
+		t.Errorf("%q: result != expect\n", typeString)
 		return
 	}
 }

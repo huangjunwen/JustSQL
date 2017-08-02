@@ -27,72 +27,72 @@ func NewScope(name string) *Scope {
 	}
 }
 
-var ident_re *regexp.Regexp = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_]*)`)
+var identRe *regexp.Regexp = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9_]*)`)
 
 // Import a package into the (file) scope and return a unique pkg name.
-func (scope *Scope) ImportPkg(pkg_path string) string {
+func (scope *Scope) ImportPkg(pkgPath string) string {
 	// Do nothing for builtin or current package.
-	if pkg_path == "" {
+	if pkgPath == "" {
 		return ""
 	}
 
 	// Already imported.
-	if pkg_name, ok := scope.pkgPaths[pkg_path]; ok {
-		return pkg_name
+	if pkgName, ok := scope.pkgPaths[pkgPath]; ok {
+		return pkgName
 	}
 
 	// Determin pkg name.
-	base := strings.ToLower(ident_re.FindString(path.Base(pkg_path)))
+	base := strings.ToLower(identRe.FindString(path.Base(pkgPath)))
 	if base == "" {
 		base = "pkg"
 	}
 
 	// Resolve name conflict.
-	pkg_name := base
+	pkgName := base
 	i := 0
 	for {
-		if _, ok := scope.pkgNames[pkg_name]; !ok {
+		if _, ok := scope.pkgNames[pkgName]; !ok {
 			break
 		}
 		// Name conflict. Add a number suffix.
 		i += 1
-		pkg_name = fmt.Sprintf("%s_%d", base, i)
+		pkgName = fmt.Sprintf("%s_%d", base, i)
 	}
 
 	// Store and return.
-	scope.pkgPaths[pkg_path] = pkg_name
-	scope.pkgNames[pkg_name] = false
+	scope.pkgPaths[pkgPath] = pkgName
+	scope.pkgNames[pkgName] = false
 
-	return pkg_name
+	return pkgName
 }
 
 // Import (if not yet) package then use it.
-func (scope *Scope) UsePkg(pkg_path string) string {
+func (scope *Scope) UsePkg(pkgPath string) string {
 	// Builtin or current package.
-	if pkg_path == "" {
+	if pkgPath == "" {
 		return ""
 	}
 
 	// Import and mark used.
-	ret := scope.ImportPkg(pkg_path)
+	ret := scope.ImportPkg(pkgPath)
 	scope.pkgNames[ret] = true
 
 	return ret
 }
 
-// List (pkg_path, pkg_name) in the (file) scope. pkg_name will be "_"
+// List (pkgPath, pkgName) in the (file) scope. pkgName will be "_"
 // if the package is imported but not used.
 func (scope *Scope) ListPkg() [][]string {
 
 	ret := make([][]string, 0, len(scope.pkgPaths))
-	for pkg_path, pkg_name := range scope.pkgPaths {
+	for pkgPath, pkgName := range scope.pkgPaths {
 		// If pkg is not used, change it to "_"
-		if !scope.pkgNames[pkg_name] {
-			pkg_name = "_"
+		if !scope.pkgNames[pkgName] {
+			pkgName = "_"
 		}
 		ret = append(ret, []string{
-			pkg_path,
-			pkg_name,
+			pkgPath,
+			pkgName,
 		})
 	}
 	return ret
@@ -120,49 +120,49 @@ func (scopes *Scopes) CurrScope() *Scope {
 }
 
 // Switch to a (file) scope.
-func (scopes *Scopes) SwitchScope(scope_name string) *Scope {
-	if scope, ok := scopes.scopes[scope_name]; ok {
+func (scopes *Scopes) SwitchScope(scopeName string) *Scope {
+	if scope, ok := scopes.scopes[scopeName]; ok {
 		scopes.currScope = scope
 		return scope
 	}
-	curr := NewScope(scope_name)
-	scopes.scopes[scope_name] = curr
+	curr := NewScope(scopeName)
+	scopes.scopes[scopeName] = curr
 	scopes.currScope = curr
 	return curr
 }
 
-func (scopes *Scopes) CreatePkgName(pkg_path string) *PkgName {
+func (scopes *Scopes) CreatePkgName(pkgPath string) *PkgName {
 	return &PkgName{
 		scopes:  scopes,
-		PkgPath: pkg_path,
+		PkgPath: pkgPath,
 	}
 }
 
-func (scopes *Scopes) CreateTypeName(pkg_path, type_name string) *TypeName {
+func (scopes *Scopes) CreateTypeName(pkgPath, typeName string) *TypeName {
 	return &TypeName{
-		PkgName:  scopes.CreatePkgName(pkg_path),
-		TypeName: type_name,
+		PkgName:  scopes.CreatePkgName(pkgPath),
+		TypeName: typeName,
 	}
 }
 
 // Create TypeName from dot-seperated spec:
-//   [full_pkg_path.]type
+//   [pkgPath.]type
 // Example:
 //   "[]byte"
 //   "sql.NullString"
 //   "github.com/go-sql-driver/mysql.NullTime"
 func (scopes *Scopes) CreateTypeNameFromSpec(s string) *TypeName {
-	var pkg_path, type_name string
+	var pkgPath, typeName string
 	i := strings.LastIndex(s, ".")
 	if i < 0 {
-		pkg_path = ""
-		type_name = s
+		pkgPath = ""
+		typeName = s
 	} else {
-		pkg_path = s[:i]
-		type_name = s[i+1:]
+		pkgPath = s[:i]
+		typeName = s[i+1:]
 	}
 
-	return scopes.CreateTypeName(pkg_path, type_name)
+	return scopes.CreateTypeName(pkgPath, typeName)
 }
 
 // PkgName represents a package used in source code.
@@ -196,9 +196,9 @@ type TypeName struct {
 // Return "PkgName.TypeName". Note that PkgName is dynamicly determined by
 // current scope. See PkgName's doc.
 func (tn *TypeName) String() string {
-	pkg_name := tn.PkgName.String()
-	if pkg_name == "" {
+	pkgName := tn.PkgName.String()
+	if pkgName == "" {
 		return tn.TypeName
 	}
-	return fmt.Sprintf("%s.%s", pkg_name, tn.TypeName)
+	return fmt.Sprintf("%s.%s", pkgName, tn.TypeName)
 }
