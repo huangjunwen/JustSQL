@@ -30,17 +30,16 @@ type ResultFieldMeta struct {
 
 func NewResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, error) {
 
-	// Is it from a real table?
 	var table *TableMeta = nil
 	var column *ColumnMeta = nil
 
 	// Real TableInfo has name.
 	if rf.Table.Name.L != "" {
-		db_meta, err := ctx.GetDBMeta(rf.DBName.L)
+		dbMeta, err := ctx.GetDBMeta(rf.DBName.L)
 		if err != nil {
 			return nil, err
 		}
-		table = db_meta.Tables[rf.Table.Name.L]
+		table = dbMeta.Tables[rf.Table.Name.L]
 		column = table.Columns[rf.Column.Offset]
 	}
 
@@ -69,43 +68,51 @@ func (rf *ResultFieldMeta) IsSet() bool {
 	return rf.Type.Tp == mysql.TypeSet
 }
 
-// TableRefsMeta contains meta information table refs (table sources).
+// TableRefsMeta contains meta information of table references (e.g. 'FROM' part of SELECT statement).
+//
+// CASE 1:
+//  MySQL allows a normal table and a derived table sharing a same name:
+//     "SELECT a.* FROM t AS a JOIN (SELECT 1) AS a;"
+//   "a.*" expands to all columns of the two tables.
+//   Also see comments of github.com/pingcap/tidb/plan/resolver.go:handleTableSource
+//
+// CASE 2:
+//   "SELECT user.* FROM user, mysql.user" is also allowed, "user.*" also expands to all
+//   columns of the two tables. This may lead to confusion.
+//
+// Due to the reasons above, JustSQL enforce table referernce names' uniqueness, even in different
+// database ("mysql.user" and "user"). Thus the above SQLs should modified to something like:
+//   "SELECT a1.*, a2.* FROM t AS a1 JOIN (SELECT 1) AS a2;
+//   "SELECT u1.*, u2.* FROM user u1, mysql.user u2"
 type TableRefsMeta struct {
-	// Similar to github.com/pingcap/tidb/plan/resolve.go:resolverContext
-
-	// List of table sources and its reference name. Reference name can be:
+	// List of table sources and its reference name. Reference name can be the following:
 	//   - tbl_name
-	//   - db_name.tbl_name
+	//   - other_database.tbl_name
 	//   - alias
-	Tables        []*ast.TableSource
-	TableRefNames []string
+	Tables         []*ast.TableSource
+	TableRefNames  []string
+	TableIsDerived []bool
 
 	// Map table ref name to its index.
-	// NOTE: normal table names (alias) can not have same names; derived table
-	// alias names can not have same names; but normal table and derived table
-	// can have same names.
-	TableMap        map[string]int
-	DerivedTableMap map[string]int
+	// Similar to github.com/tidb/plan/resolver.go:resolverContext,
+	// but only use one map to enforce name uniqueness for normal tables and derived tables.
+	TableMap map[string]int
 }
 
 func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, error) {
 
 	ret := &TableRefsMeta{
-		Tables:          make([]*ast.TableSource, 0),
-		TableRefNames:   make([]string, 0),
-		TableMap:        make(map[string]int),
-		DerivedTableMap: make(map[string]int),
+		Tables:         make([]*ast.TableSource, 0),
+		TableRefNames:  make([]string, 0),
+		TableIsDerived: make([]bool, 0),
+		TableMap:       make(map[string]int),
 	}
 
 	var collect func(*ast.Join) error
 
 	collect = func(j *ast.Join) error {
 		// Left then right
-		rss := []ast.ResultSetNode{
-			j.Left,
-			j.Right,
-		}
-		for _, rs := range rss {
+		for _, rs := range [2]ast.ResultSetNode{j.Left, j.Right} {
 			if rs == nil {
 				continue
 			}
@@ -113,39 +120,33 @@ func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, 
 			case *ast.TableSource:
 
 				var (
-					table_ref_name string
-					is_derived     bool = false
+					tableRefName string
+					isDerived    bool = false
 				)
-				// see github.com/pingcap/tidb/plan/resolve.go:handleTableSource
+
 				switch s := r.Source.(type) {
 				case *ast.TableName:
-					table_ref_name = r.AsName.L
-					if table_ref_name == "" {
-						table_ref_name = ctx.UniqueTableName(s.Schema.L, s.Name.L)
+					tableRefName = r.AsName.L
+					if tableRefName == "" {
+						tableRefName = ctx.UniqueTableName(s.Schema.L, s.Name.L)
 					}
 
 				default:
-					table_ref_name = r.AsName.L
-					is_derived = true
+					tableRefName = r.AsName.L
+					isDerived = true
 				}
 
-				if table_ref_name == "" {
+				if tableRefName == "" {
 					return fmt.Errorf("[bug?] No name for table source[%d]", len(ret.Tables))
 				}
-				// see https://github.com/pingcap/tidb/issues/3908
-				if !is_derived {
-					if _, ok := ret.TableMap[table_ref_name]; ok {
-						return fmt.Errorf("[bug?] Duplicate normal table ref name %+q", table_ref_name)
-					}
-					ret.TableMap[table_ref_name] = len(ret.Tables)
-				} else {
-					if _, ok := ret.DerivedTableMap[table_ref_name]; ok {
-						return fmt.Errorf("[bug?] Duplicate derived table ref name %+q", table_ref_name)
-					}
-					ret.DerivedTableMap[table_ref_name] = len(ret.Tables)
+				if _, ok := ret.TableMap[tableRefName]; ok {
+					return fmt.Errorf("Duplicate table name/alias %+q, plz checkout JustSQL's document",
+						tableRefName)
 				}
+				ret.TableMap[tableRefName] = len(ret.Tables)
 				ret.Tables = append(ret.Tables, r)
-				ret.TableRefNames = append(ret.TableRefNames, table_ref_name)
+				ret.TableRefNames = append(ret.TableRefNames, tableRefName)
+				ret.TableIsDerived = append(ret.TableIsDerived, isDerived)
 
 			case *ast.Join:
 				if err := collect(r); err != nil {
@@ -164,40 +165,57 @@ func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, 
 		return nil, err
 	}
 
+	// Check name duplication for CASE 2
+	names := map[string]string{}
+	for tableRefName, _ := range ret.TableMap {
+
+		parts := strings.Split(tableRefName, ".")
+		name := ""
+		switch len(parts) {
+		case 1:
+			name = tableRefName
+		case 2:
+			name = parts[1]
+		default:
+			panic(fmt.Errorf("Invalid table ref name %+q", tableRefName))
+		}
+
+		if existName, ok := names[name]; ok {
+			return nil, fmt.Errorf("Plz add alias to table ref name %+q or %+q", existName,
+				tableRefName)
+		}
+		names[name] = tableRefName
+
+	}
 	return ret, nil
 
 }
 
-// Return a list of result field of the table or nil if not exists.
-// NOTE: if table_ref_name is both normal table name and derived table name,
-// the result will be the combination of both.
-// see github.com/pingcap/tidb/plan/resolve.go:createResultFields
-func (s *TableRefsMeta) GetResultFields(table_ref_name string) []*ast.ResultField {
+// GetResultFields return a list of result field of the table or nil if not exists.
+func (t *TableRefsMeta) GetResultFields(tableRefName string) []*ast.ResultField {
 
-	tab_idx1, ok1 := s.TableMap[table_ref_name]
-	tab_idx2, ok2 := s.DerivedTableMap[table_ref_name]
-	if !ok1 && !ok2 {
+	idx, ok := t.TableMap[tableRefName]
+	if !ok {
 		return nil
 	}
-	ret := []*ast.ResultField{}
-	if ok1 {
-		ret = s.Tables[tab_idx1].Source.GetResultFields()
-	}
-	if ok2 {
-		ret = append(ret, s.Tables[tab_idx2].Source.GetResultFields()...)
-	}
-	return ret
+	return t.Tables[idx].Source.GetResultFields()
 
 }
 
-func (s *TableRefsMeta) Has(table_ref_name string) bool {
-	_, ok := s.TableMap[table_ref_name]
-	return ok
+func (t *TableRefsMeta) IsNormalTable(tableRefName string) bool {
+	i, ok := t.TableMap[tableRefName]
+	if !ok {
+		return false
+	}
+	return !t.TableIsDerived[i]
 }
 
-func (s *TableRefsMeta) HasDerived(table_ref_name string) bool {
-	_, ok := s.DerivedTableMap[table_ref_name]
-	return ok
+func (t *TableRefsMeta) IsDerivedTable(tableRefName string) bool {
+	i, ok := t.TableMap[tableRefName]
+	if !ok {
+		return false
+	}
+	return t.TableIsDerived[i]
 }
 
 // WildcardMeta contain information for a wildcard.
@@ -222,25 +240,25 @@ type FieldListMeta struct {
 	ResultFieldToWildcard []int
 }
 
-func (f *FieldListMeta) addWildcard(table_ref_name string, result_field_offset int, result_field_num int) {
+func (f *FieldListMeta) addWildcard(tableRefName string, resultFieldOffset int, resultFieldNum int) {
 
 	idx := len(f.Wildcards)
-	for i := result_field_offset; i < result_field_offset+result_field_num; i++ {
+	for i := resultFieldOffset; i < resultFieldOffset+resultFieldNum; i++ {
 		if f.ResultFieldToWildcard[i] != -1 {
 			panic(fmt.Errorf("f.ResultFieldToWildcard[%d] == %d != -1", i, f.ResultFieldToWildcard[i]))
 		}
 		f.ResultFieldToWildcard[i] = idx
 	}
 	f.Wildcards = append(f.Wildcards, WildcardMeta{
-		TableRefName:      table_ref_name,
-		ResultFieldOffset: result_field_offset,
-		ResultFieldNum:    result_field_num,
+		TableRefName:      tableRefName,
+		ResultFieldOffset: resultFieldOffset,
+		ResultFieldNum:    resultFieldNum,
 	})
 
 }
 
 // NewFieldListMeta create FieldListMeta from the field list and table refs of a SELECT statement.
-func NewFieldListMeta(ctx *Context, stmt *ast.SelectStmt, table_refs_meta *TableRefsMeta) (*FieldListMeta, error) {
+func NewFieldListMeta(ctx *Context, stmt *ast.SelectStmt, tableRefsMeta *TableRefsMeta) (*FieldListMeta, error) {
 
 	ret := &FieldListMeta{
 		Wildcards:             make([]WildcardMeta, 0),
@@ -257,24 +275,24 @@ func NewFieldListMeta(ctx *Context, stmt *ast.SelectStmt, table_refs_meta *Table
 			continue
 		}
 		// Qualified wildcard ("[db.]tbl.*")
-		table_ref_name := ctx.UniqueTableName(f.WildCard.Schema.L, f.WildCard.Table.L)
-		if table_ref_name != "" {
-			rfs := table_refs_meta.GetResultFields(table_ref_name)
+		tableRefName := ctx.UniqueTableName(f.WildCard.Schema.L, f.WildCard.Table.L)
+		if tableRefName != "" {
+			rfs := tableRefsMeta.GetResultFields(tableRefName)
 			if len(rfs) == 0 {
-				return nil, fmt.Errorf("[bug?] TableRefsMeta.GetResultFields(%+q) == nil", table_ref_name)
+				return nil, fmt.Errorf("[bug?] TableRefsMeta.GetResultFields(%+q) == nil", tableRefName)
 			}
-			ret.addWildcard(table_ref_name, offset, len(rfs))
+			ret.addWildcard(tableRefName, offset, len(rfs))
 			offset += len(rfs)
 			continue
 		}
 		// Unqualified wildcard ("*")
-		for i, table := range table_refs_meta.Tables {
-			table_ref_name := table_refs_meta.TableRefNames[i]
+		for i, table := range tableRefsMeta.Tables {
+			tableRefName := tableRefsMeta.TableRefNames[i]
 			rfs := table.GetResultFields()
 			if len(rfs) == 0 {
-				return nil, fmt.Errorf("[bug?] Table[%+q].GetResultFields() == nil", table_ref_name)
+				return nil, fmt.Errorf("[bug?] Table[%+q].GetResultFields() == nil", tableRefName)
 			}
-			ret.addWildcard(table_ref_name, offset, len(rfs))
+			ret.addWildcard(tableRefName, offset, len(rfs))
 			offset += len(rfs)
 		}
 
@@ -392,52 +410,52 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 	}
 
 	parts := []string{}
-	text_offset := 0
+	textOffset := 0
 	for n, field := range stmt.Fields.Fields {
 
 		if field.WildCard == nil {
 			continue
 		}
 
-		err_prefix := fmt.Sprintf("Expand wildcard field[%d]:", n)
+		errPrefix := fmt.Sprintf("Expand wildcard field[%d]:", n)
 
 		// Save part before this wildcard field.
-		parts = append(parts, text[text_offset:field.Offset])
+		parts = append(parts, text[textOffset:field.Offset])
 
-		// Calculate this wildcard field length to move text_offset.
+		// Calculate this wildcard field length to move textOffset.
 		// XXX: field.Text() return "" so i need to construct the field text myself -_-
-		field_text := "*"
+		fieldText := "*"
 		if field.WildCard.Table.O != "" {
-			field_text = field.WildCard.Table.O + ".*"
+			fieldText = field.WildCard.Table.O + ".*"
 			if field.WildCard.Schema.O != "" {
-				field_text = field.WildCard.Schema.O + "." + field_text
+				fieldText = field.WildCard.Schema.O + "." + fieldText
 			}
 		}
-		if !strings.HasPrefix(text[field.Offset:], field_text) {
-			return nil, fmt.Errorf("%s strings.HasPrefix(%+q, %+q) == false", err_prefix,
-				text[field.Offset:], field_text)
+		if !strings.HasPrefix(text[field.Offset:], fieldText) {
+			return nil, fmt.Errorf("%s strings.HasPrefix(%+q, %+q) == false", errPrefix,
+				text[field.Offset:], fieldText)
 		}
-		text_offset = field.Offset + len(field_text)
+		textOffset = field.Offset + len(fieldText)
 
 		// Expand wildcard.
-		table_ref_name := ctx.UniqueTableName(field.WildCard.Schema.L, field.WildCard.Table.L)
-		expand_parts := []string{}
+		tableRefName := ctx.UniqueTableName(field.WildCard.Schema.L, field.WildCard.Table.L)
+		expandParts := []string{}
 
-		if table_ref_name != "" {
+		if tableRefName != "" {
 
 			// Qualified wildcard ("[db.]tbl.*")
-			rfs := s.TableRefs.GetResultFields(table_ref_name)
+			rfs := s.TableRefs.GetResultFields(tableRefName)
 			if rfs == nil {
-				panic(fmt.Errorf("%s No result fields for table %+q", err_prefix, table_ref_name))
+				panic(fmt.Errorf("%s No result fields for table %+q", errPrefix, tableRefName))
 			}
 
 			for i, rf := range rfs {
-				rf_name, err := resultFieldName(rf, true)
+				rfName, err := resultFieldName(rf, true)
 				if err != nil {
 					return nil, fmt.Errorf("%s resultFieldName for %+q[%d]: %s",
-						err_prefix, table_ref_name, i, err)
+						errPrefix, tableRefName, i, err)
 				}
-				expand_parts = append(expand_parts, table_ref_name+"."+rf_name)
+				expandParts = append(expandParts, tableRefName+"."+rfName)
 			}
 
 		} else {
@@ -445,25 +463,25 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 			// Unqualified wildcard ("*")
 			for i, table := range s.TableRefs.Tables {
 
-				table_ref_name = s.TableRefs.TableRefNames[i]
+				tableRefName = s.TableRefs.TableRefNames[i]
 				rfs := table.GetResultFields()
 
 				for j, rf := range rfs {
-					rf_name, err := resultFieldName(rf, true)
+					rfName, err := resultFieldName(rf, true)
 					if err != nil {
 						return nil, fmt.Errorf("%s resultFieldName for %+q[%d]: %s",
-							err_prefix, table_ref_name, j, err)
+							errPrefix, tableRefName, j, err)
 					}
-					expand_parts = append(expand_parts, table_ref_name+"."+rf_name)
+					expandParts = append(expandParts, tableRefName+"."+rfName)
 				}
 			}
 		}
 
-		parts = append(parts, strings.Join(expand_parts, ", "))
+		parts = append(parts, strings.Join(expandParts, ", "))
 
 	}
 
-	parts = append(parts, text[text_offset:])
+	parts = append(parts, text[textOffset:])
 	text = strings.Join(parts, "")
 
 	// Second-re-parse and re-compile.
@@ -477,22 +495,22 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 
 }
 
-func resultFieldName(rf *ast.ResultField, as_identifier bool) (string, error) {
+func resultFieldName(rf *ast.ResultField, asIdentifier bool) (string, error) {
 
-	rf_name := rf.ColumnAsName.L
-	if rf_name == "" {
-		rf_name = rf.Column.Name.L
+	rfName := rf.ColumnAsName.L
+	if rfName == "" {
+		rfName = rf.Column.Name.L
 	}
-	if rf_name == "" {
+	if rfName == "" {
 		return "", fmt.Errorf("Empty result field name")
 	}
-	if !as_identifier {
-		return rf_name, nil
+	if !asIdentifier {
+		return rfName, nil
 	}
-	if utils.IsIdent(rf_name) {
-		return rf_name, nil
+	if utils.IsIdent(rfName) {
+		return rfName, nil
 	}
-	return "", fmt.Errorf("%+q is not a valid identifier", rf_name)
+	return "", fmt.Errorf("%+q is not a valid identifier", rfName)
 
 }
 

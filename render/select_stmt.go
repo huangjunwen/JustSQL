@@ -33,7 +33,7 @@ type {{ $returnType }} struct {
 {{- range $i, $rf := $rfs -}}
 	{{/* whether this result field is in a normal table wildcard expansion */}}
 	{{- $wildcardTableRefName := $.OriginStmt.FieldList.WildcardTableRefName $i -}}
-	{{- $wildcardTableIsNormal := and ($.OriginStmt.TableRefs.Has $wildcardTableRefName) (not ($.OriginStmt.TableRefs.HasDerived $wildcardTableRefName)) -}}
+	{{- $wildcardTableIsNormal := and ($.OriginStmt.TableRefs.IsNormalTable $wildcardTableRefName) (not ($.OriginStmt.TableRefs.IsDerivedTable $wildcardTableRefName)) -}}
 	{{- $wildcardOffset := $.OriginStmt.FieldList.WildcardOffset $i -}}
 
 	{{- if $wildcardTableIsNormal }}
