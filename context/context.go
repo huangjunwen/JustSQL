@@ -11,7 +11,7 @@ const (
 	DefaultNamePlaceholder = ":"
 )
 
-// Context contains runtime information of justsql.
+// Context contains global runtime information of justsql.
 type Context struct {
 	// The embeded db.
 	DB *EmbedDB
