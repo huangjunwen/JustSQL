@@ -22,12 +22,12 @@ func (a *SubsAnnot) Set(key, val string) error {
 	return fmt.Errorf("content: unknown option %+q", key)
 }
 
-type FuncReturnType int
+type FuncReturnType string
 
 const (
-	ReturnUnknown = FuncReturnType(iota)
-	ReturnMany
-	ReturnOne
+	ReturnUnknown = FuncReturnType("")
+	ReturnMany    = FuncReturnType("many")
+	ReturnOne     = FuncReturnType("one")
 )
 
 // FuncAnnot declares a wrapper function for a SQL.

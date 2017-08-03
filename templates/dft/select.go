@@ -1,7 +1,7 @@
-package render
+package dft
 
 import (
-	"github.com/pingcap/tidb/ast"
+	"github.com/huangjunwen/JustSQL/render"
 )
 
 func init() {
@@ -17,7 +17,7 @@ func init() {
 {{/* =========================== */}}
 {{/*          declares           */}}
 {{/* =========================== */}}
-{{- $hasMultiArg := .Func.HasMultiArg -}}
+{{- $hasInBinding := .Func.HasInBinding -}}
 {{- $funcName := .Func.Name -}}
 {{- $rfs := .Stmt.ResultFields -}}
 {{- $returnType := printf "%sResult" .Func.Name -}}
@@ -89,7 +89,7 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg :
 		return nil, err_
 	}
 
-{{ if $hasMultiArg -}}
+{{ if $hasInBinding -}}
 	// - Handle "IN (?)".
 	query_, args_, err_ := {{ $sqlx }}.In(query_, args_...)
 	if err_ != nil {
@@ -143,5 +143,5 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg :
 }
 
 `
-	RegistDefaultTypeTemplate((*ast.SelectStmt)(nil), t)
+	render.RegistBuiltinTemplate("select", render.DefaultTemplateName, t)
 }

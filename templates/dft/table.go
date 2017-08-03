@@ -1,7 +1,7 @@
-package render
+package dft
 
 import (
-	"github.com/huangjunwen/JustSQL/context"
+	"github.com/huangjunwen/JustSQL/render"
 )
 
 func init() {
@@ -246,5 +246,5 @@ func (entry_ *{{ $struct_name }}) Delete(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }
 {{ end }}
 
 `
-	RegistDefaultTypeTemplate((*context.TableMeta)(nil), t)
+	render.RegistBuiltinTemplate("table", render.DefaultTemplateName, t)
 }

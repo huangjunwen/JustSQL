@@ -82,7 +82,7 @@ func (a *StringArr) Push(s string) string {
 	return ""
 }
 
-func buildExtraFuncs(ctx *context.Context) template.FuncMap {
+func BuildExtraFuncs(ctx *context.Context) template.FuncMap {
 
 	scopes := ctx.Scopes
 

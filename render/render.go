@@ -3,107 +3,165 @@ package render
 import (
 	"fmt"
 	"github.com/huangjunwen/JustSQL/context"
-	"github.com/huangjunwen/JustSQL/handler"
 	"io"
 	"reflect"
 	"text/template"
 )
 
-var (
-	default_type_templates map[reflect.Type]string = make(map[reflect.Type]string)
+const (
+	RootTemplateName    = ""
+	DefaultTemplateName = "dft"
 )
 
-// Regist default template for a type.
-func RegistDefaultTypeTemplate(obj interface{}, text string) {
-	t := reflect.TypeOf(obj)
-	if _, ok := default_type_templates[t]; ok {
-		panic(fmt.Errorf("RegistTypeTemplate: %T has already registed", obj))
+// Handler takes context and an object (TableMeta/SelectStmt...) as
+// parameters, returns an object (the 'dot' object) for template renderring.
+type Handler func(*context.Context, interface{}) (interface{}, error)
+
+// Builtin mapping.
+var (
+	// Map type name -> type
+	typeMap map[string]reflect.Type = make(map[string]reflect.Type)
+	// Map type -> handler
+	handlerMap map[reflect.Type]Handler = make(map[reflect.Type]Handler)
+	// Map type -> (template name -> template content)
+	templateMap map[reflect.Type]map[string]string = make(map[reflect.Type]map[string]string)
+	// True if RenderContext has been created.
+	initialized = false
+)
+
+// RegistType regist a type for renderring.
+func RegistType(typeName string, obj interface{}, handler Handler) {
+
+	if initialized {
+		panic(fmt.Errorf("RegistType: called after initialized"))
 	}
 
-	default_type_templates[t] = text
+	if _, ok := typeMap[typeName]; ok {
+		panic(fmt.Errorf("RegistType: type name %+q has already registered", typeName))
+	}
+
+	t := reflect.TypeOf(obj)
+	if _, ok := handlerMap[t]; ok {
+		panic(fmt.Errorf("RegistType: type %T has already registered", obj))
+	}
+
+	typeMap[typeName] = t
+	handlerMap[t] = handler
+	templateMap[t] = map[string]string{}
+
 }
 
-// RenderInfo contains templates to render objects.
-type RenderInfo struct {
-	// map type -> []*template.Template
-	// tmpls[0] is the default template
-	// tmpls[-1] is the template used for renderring
-	tmpls map[reflect.Type][]*template.Template
+// RegistBuiltinTemplate regist a builtin template for a type with the given name.
+func RegistBuiltinTemplate(typeName string, templateName string, templateContent string) {
+
+	if initialized {
+		panic(fmt.Errorf("RegistBuiltinTemplate: called after initialized"))
+	}
+
+	t, ok := typeMap[typeName]
+	if !ok {
+		panic(fmt.Errorf("RegistBuiltinTemplate: type %+q has not registered yet", typeName))
+	}
+
+	templates := templateMap[t]
+	if _, ok := templates[templateName]; ok {
+		panic(fmt.Errorf("RegistBuiltinTemplate: template %+q of type %+q has already registered",
+			templateName, typeName))
+	}
+
+	templates[templateName] = templateContent
+
+}
+
+// RenderContext contain information to render objects.
+type RenderContext struct {
+	// Global context.
+	*context.Context
+
+	// Root template is empty template used to create
+	// associated templates, see http://golang.org/pkg/text/template/#hdr-Associated_templates
+	RootTemplates map[reflect.Type]*template.Template
+
+	// Templates used to render object.
+	Templates map[reflect.Type]*template.Template
 
 	// Extra functions used in templates.
-	extraFuncs template.FuncMap
-
-	ctx *context.Context
+	ExtraFuncs template.FuncMap
 }
 
-func (r *RenderInfo) defaultTmpl(obj interface{}) *template.Template {
-	tmpls, ok := r.tmpls[reflect.TypeOf(obj)]
-	if !ok {
-		return nil
-	}
-	return tmpls[0]
-}
+// NewRenderContext create RenderContext from Context.
+func NewRenderContext(ctx *context.Context) (*RenderContext, error) {
 
-func (r *RenderInfo) currentTmpl(obj interface{}) *template.Template {
-	tmpls, ok := r.tmpls[reflect.TypeOf(obj)]
-	if !ok {
-		return nil
-	}
-	return tmpls[len(tmpls)-1]
-}
+	// Mark initialized.
+	initialized = true
 
-func NewRenderInfo(ctx *context.Context) *RenderInfo {
-	ret := &RenderInfo{
-		tmpls:      make(map[reflect.Type][]*template.Template),
-		extraFuncs: buildExtraFuncs(ctx),
-		ctx:        ctx,
+	ret := &RenderContext{
+		Context:       ctx,
+		RootTemplates: make(map[reflect.Type]*template.Template),
+		Templates:     make(map[reflect.Type]*template.Template),
+		ExtraFuncs:    BuildExtraFuncs(ctx),
 	}
-	for t, text := range default_type_templates {
-		tmpl := template.New("default").Funcs(ret.extraFuncs)
-		if _, err := tmpl.Parse(text); err != nil {
-			panic(err)
-		}
-		ret.tmpls[t] = []*template.Template{
-			tmpl,
+
+	for _, t := range typeMap {
+		// Create empty root template for each registered type.
+		root := template.Must(template.New(RootTemplateName).Parse(""))
+		ret.RootTemplates[t] = root
+		ret.Templates[t] = root
+
+		// Parse all builtin templates.
+		for templateName, templateContent := range templateMap[t] {
+			tmpl := root.New(templateName).Funcs(ret.ExtraFuncs)
+			if _, err := tmpl.Parse(templateContent); err != nil {
+				return nil, err
+			}
+			if templateName == DefaultTemplateName {
+				ret.Templates[t] = tmpl
+			}
 		}
 	}
-	return ret
+
+	return ret, nil
 }
 
-// Add a new template to the RenderInfo. The lastest added
-// template will be used for renderring.
-func (r *RenderInfo) AddTemplate(obj interface{}, name string, text string) error {
-	default_tmpl := r.defaultTmpl(obj)
-	if default_tmpl == nil {
-		return fmt.Errorf("AddTemplate: no render info for %T", obj)
+// AddTemplate add a template for a type with the given name.
+// This latest added template is used as the main template to render the given type.
+func (r *RenderContext) AddTemplate(typeName string, templateName string, templateContent string) error {
+
+	// Check type.
+	t, ok := typeMap[typeName]
+	if !ok {
+		return fmt.Errorf("AddTemplate: type %+q has not registered yet", typeName)
 	}
 
-	tmpl := default_tmpl.New(name).Funcs(r.extraFuncs)
-	if _, err := tmpl.Parse(text); err != nil {
+	// Parse the template.
+	tmpl := r.RootTemplates[t].New(templateName).Funcs(r.ExtraFuncs)
+	if _, err := tmpl.Parse(templateContent); err != nil {
 		return err
 	}
 
-	t := reflect.TypeOf(obj)
-	r.tmpls[t] = append(r.tmpls[t], tmpl)
+	// Latest added template is used as the main template.
+	r.Templates[t] = tmpl
+
 	return nil
 }
 
-// Render.
-func (r *RenderInfo) Run(obj interface{}, w io.Writer) error {
-	tmpl := r.currentTmpl(obj)
-	if tmpl == nil {
+// Run render the obj.
+func (r *RenderContext) Render(obj interface{}, w io.Writer) error {
+
+	t := reflect.TypeOf(obj)
+
+	// Choose template.
+	tmpl, ok := r.Templates[t]
+	if !ok {
 		return fmt.Errorf("Render: don't know how to render %T", obj)
 	}
 
-	h := handler.GetHandler(obj)
-	if h == nil {
-		return fmt.Errorf("Render: GetHandler return nil for %T", obj)
-	}
-
-	dot, err := h(r.ctx, obj)
+	// Generate 'dot' object.
+	dot, err := handlerMap[t](r.Context, obj)
 	if err != nil {
 		return err
 	}
 
 	return tmpl.Execute(w, dot)
+
 }

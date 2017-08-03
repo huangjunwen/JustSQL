@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/huangjunwen/JustSQL/context"
 	"github.com/huangjunwen/JustSQL/render"
+	_ "github.com/huangjunwen/JustSQL/templates/dft"
 	"github.com/huangjunwen/JustSQL/utils"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
@@ -43,7 +44,7 @@ var (
 	// Global variables.
 	package_name string
 	ctx          *context.Context
-	ri           *render.RenderInfo
+	rctx         *render.RenderContext
 )
 
 func parseOptionsAndInit() {
@@ -99,8 +100,11 @@ func parseOptionsAndInit() {
 		log.Fatalf("NewContext: %s", err)
 	}
 
-	// Init render info.
-	ri = render.NewRenderInfo(ctx)
+	// Init render context.
+	rctx, err = render.NewRenderContext(ctx)
+	if err != nil {
+		log.Fatalf("NewRenderContext: %s", err)
+	}
 
 }
 
@@ -263,7 +267,7 @@ func exportTables() {
 		ctx.Scopes.SwitchScope(scope)
 
 		var body bytes.Buffer
-		if err := ri.Run(table_meta, &body); err != nil {
+		if err := rctx.Render(table_meta, &body); err != nil {
 			log.Fatalf("render.Render(%q): %s", scope, err)
 		}
 
@@ -303,7 +307,7 @@ func processDML() {
 
 			}
 
-			if err := ri.Run(stmt, &body); err != nil {
+			if err := rctx.Render(stmt, &body); err != nil {
 				log.Fatalf("render.Render(%q): %s", stmt_text, err)
 			}
 
