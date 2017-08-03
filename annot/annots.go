@@ -104,6 +104,9 @@ func (a *ArgAnnot) Set(key, val string) error {
 type BindAnnot struct {
 	// Bind arg name.
 	Name string
+
+	// The binding is used for "IN (?, ?, ?)"
+	In bool
 }
 
 func (a *BindAnnot) SetPrimary(val string) error {
@@ -118,10 +121,15 @@ func (a *BindAnnot) SetPrimary(val string) error {
 }
 
 func (a *BindAnnot) Set(key, val string) error {
-	if key == "" {
+	switch key {
+	default:
+		return fmt.Errorf("bind: unknown option %+q", key)
+	case "in":
+		a.In = true
+	case "":
 		return nil
 	}
-	return fmt.Errorf("bind: unknown option %+q", key)
+	return nil
 }
 
 func init() {
