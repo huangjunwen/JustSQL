@@ -6,13 +6,13 @@ import (
 	"testing"
 )
 
-func testAnnot(t *testing.T, src string, expect Annot, expect_err bool) {
+func testAnnot(t *testing.T, src string, expect Annot, expectErr bool) {
 	annot, err := ParseAnnot(src)
-	fmt.Printf("%q:\n\texpect=%#v\n\tresult=%#v\n\texpect_err=%v\n\terr=%v\n",
-		src, expect, annot, expect_err, err)
+	fmt.Printf("%q:\n\texpect=%#v\n\tresult=%#v\n\texpectErr=%v\n\terr=%v\n",
+		src, expect, annot, expectErr, err)
 
-	if (err != nil && !expect_err) || (err == nil && expect_err) {
-		t.Errorf("%q: err != expect_err\n", src)
+	if (err != nil && !expectErr) || (err == nil && expectErr) {
+		t.Errorf("%q: err != expectErr\n", src)
 		return
 	}
 	if !reflect.DeepEqual(annot, expect) {

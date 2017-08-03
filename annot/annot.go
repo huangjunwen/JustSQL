@@ -7,21 +7,22 @@ import (
 	"strings"
 )
 
-// Annotation is some extra information(k/v) stored in comments. Format:
+// Annot (annotation) is some extra information(k/v) stored in comments.
+// Format (except SubsAnnot):
 //   primaryKey[:primaryVal] key[:val] ...
 // Example:
-//   bind:name multi
+//   func:HelloWorld attribute:"one two three"
 type Annot interface {
 	SetPrimary(val string) error
 	// Set non-primary key/val, if key == "", there will be no more
 	// key/val pairs.
-	Set(key, val string) error
+	Set(key string, val string) error
 }
 
-// Annotation name -> Annot type
-var annot_map = make(map[string]reflect.Type)
+// Annotation primary key -> Annot type
+var annotMap = make(map[string]reflect.Type)
 
-// Regist annotation. obj should be a pointer.
+// RegistAnnot register annotation type. obj should be a pointer.
 func RegistAnnot(obj Annot, names ...string) {
 
 	typ := reflect.TypeOf(obj)
@@ -31,24 +32,24 @@ func RegistAnnot(obj Annot, names ...string) {
 
 	typ = typ.Elem()
 	for _, name := range names {
-		annot_map[name] = typ
+		annotMap[name] = typ
 	}
 
 }
 
-// Parse annotation.
+// ParseAnnot parse annotation from a string.
 func ParseAnnot(src string) (Annot, error) {
+
+	src = strings.TrimSpace(src)
+
 	// Special case for SubsAnnot
 	if len(src) <= 0 {
 		return &SubsAnnot{
 			Content: "",
 		}, nil
-	}
-
-	switch src[0] {
-	case ' ', '\t', '\n', '\r':
+	} else if src[0] == '$' {
 		return &SubsAnnot{
-			Content: strings.TrimSpace(src),
+			Content: strings.TrimSpace(src[1:]),
 		}, nil
 	}
 
@@ -56,20 +57,20 @@ func ParseAnnot(src string) (Annot, error) {
 	fn := parseAnnotString(src)
 
 	// The first key/val is primary key/val
-	primary_key, primary_val, err := fn()
+	primaryKey, primaryVal, err := fn()
 	if err != nil {
 		return nil, err
 	}
 
 	// Using primary key to choose type
-	typ, ok := annot_map[primary_key]
+	typ, ok := annotMap[primaryKey]
 	if !ok {
-		return nil, fmt.Errorf("Unknown annotation %+q", primary_key)
+		return nil, fmt.Errorf("Unknown annotation %+q", primaryKey)
 	}
 	ret := reflect.New(typ).Interface().(Annot)
 
 	// Set primary val
-	err = ret.SetPrimary(primary_val)
+	err = ret.SetPrimary(primaryVal)
 	if err != nil {
 		return nil, err
 	}
@@ -96,19 +97,22 @@ func ParseAnnot(src string) (Annot, error) {
 }
 
 var (
-	annot_re  *regexp.Regexp = regexp.MustCompile(`^([A-Za-z][0-9A-Za-z_]*)(:(("[^"\\]*(?:\\.[^"\\]*)*")|([^\s:"]+)))?\s+`)
-	escape_re *regexp.Regexp = regexp.MustCompile(`\\.`)
+	annotRe  *regexp.Regexp = regexp.MustCompile(`^([A-Za-z][0-9A-Za-z_]*)(:(("[^"\\]*(?:\\.[^"\\]*)*")|([^\s:"]+)))?\s+`)
+	escapeRe *regexp.Regexp = regexp.MustCompile(`\\.`)
 )
 
 func parseAnnotString(src string) func() (string, string, error) {
+
+	// Append a space at the end to match annotRe
 	remain := append([]byte(strings.TrimSpace(src)), ' ')
+
 	return func() (string, string, error) {
 		// drained
 		if len(remain) == 0 {
 			return "", "", nil
 		}
 
-		m := annot_re.FindSubmatch(remain)
+		m := annotRe.FindSubmatch(remain)
 		if m == nil {
 			return "", "", fmt.Errorf("Illegal annot kv format near: %q", string(remain))
 		}
@@ -119,7 +123,7 @@ func parseAnnotString(src string) func() (string, string, error) {
 
 		// if it is quoted. Unquote it, see: https://golang.org/ref/spec#Rune_literals
 		if len(m[4]) != 0 {
-			v = escape_re.ReplaceAllFunc(v[1:len(v)-1], func(x []byte) []byte {
+			v = escapeRe.ReplaceAllFunc(v[1:len(v)-1], func(x []byte) []byte {
 				switch c := x[1]; c {
 				default:
 					return []byte{c}

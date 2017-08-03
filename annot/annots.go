@@ -5,7 +5,7 @@ import (
 	"github.com/huangjunwen/JustSQL/utils"
 )
 
-// Substitute content directly.
+// SubsAnnot declares a block of content for substitution directly.
 type SubsAnnot struct {
 	Content string
 }
@@ -22,13 +22,21 @@ func (a *SubsAnnot) Set(key, val string) error {
 	return fmt.Errorf("content: unknown option %+q", key)
 }
 
-// Declare a wrapper function.
+type FuncReturnType int
+
+const (
+	ReturnUnknown = FuncReturnType(iota)
+	ReturnMany
+	ReturnOne
+)
+
+// FuncAnnot declares a wrapper function for a SQL.
 type FuncAnnot struct {
 	// Function name.
 	Name string
 
 	// Result information.
-	Return string
+	Return FuncReturnType
 }
 
 func (a *FuncAnnot) SetPrimary(val string) error {
@@ -47,22 +55,26 @@ func (a *FuncAnnot) Set(key, val string) error {
 		return nil
 	}
 	if key == "return" {
-		a.Return = val
+		switch val {
+		case "many":
+			a.Return = ReturnMany
+		case "one":
+			a.Return = ReturnOne
+		default:
+			return fmt.Errorf("func: unknwon return type %+q", val)
+		}
 		return nil
 	}
 	return fmt.Errorf("func: unknown option %+q", key)
 }
 
-// Declare a function argument (potentially used in parameter binding).
+// ArgAnnot declares a function argument (maybe used in parameter binding).
 type ArgAnnot struct {
 	// Name of the argument.
 	Name string
 
 	// Type of the argument.
 	Type string
-
-	// True if for "IN (?)"
-	Multi bool
 }
 
 func (a *ArgAnnot) SetPrimary(val string) error {
@@ -82,8 +94,6 @@ func (a *ArgAnnot) Set(key, val string) error {
 		return fmt.Errorf("arg: unknown option %+q", key)
 	case "type":
 		a.Type = val
-	case "multi":
-		a.Multi = true
 	case "":
 		return nil
 	}

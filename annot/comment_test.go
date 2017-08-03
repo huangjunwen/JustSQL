@@ -6,13 +6,13 @@ import (
 	"testing"
 )
 
-func testScanComment(t *testing.T, src string, expect []Comment, expect_err bool) {
+func testScanComment(t *testing.T, src string, expect []Comment, expectErr bool) {
 	res, err := ScanComment(src)
-	fmt.Printf("%q:\n\texpect=%#v\n\tresult=%#v\n\texpect_err=%v\n\terr=%v\n",
-		src, expect, res, expect_err, err)
+	fmt.Printf("%q:\n\texpect=%#v\n\tresult=%#v\n\texpectErr=%v\n\terr=%v\n",
+		src, expect, res, expectErr, err)
 
-	if (err != nil && !expect_err) || (err == nil && expect_err) {
-		t.Errorf("%q: err != expect_err\n", src)
+	if (err != nil && !expectErr) || (err == nil && expectErr) {
+		t.Errorf("%q: err != expectErr\n", src)
 		return
 	}
 	if !reflect.DeepEqual(res, expect) {
@@ -163,11 +163,11 @@ func TestCommentWithAnnot(t *testing.T) {
 			},
 		},
 	}, false)
-	testScanComment(t, "/* $ */", []Comment{
+	testScanComment(t, "/* $$ */", []Comment{
 		Comment{
 			Offset:  0,
-			Length:  7,
-			Content: "$",
+			Length:  8,
+			Content: "$$",
 			Annot: &SubsAnnot{
 				Content: "",
 			},
