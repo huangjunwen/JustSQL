@@ -495,6 +495,42 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 
 }
 
+// InsertStmtMeta contains meta information of a INSERT statement.
+type InsertStmtMeta struct {
+	*ast.InsertStmt
+}
+
+// NewInsertStmtMeta create InsertStmtMeta from *ast.InsertStmt.
+func NewInsertStmtMeta(ctx *Context, stmt *ast.InsertStmt) (*InsertStmtMeta, error) {
+	return &InsertStmtMeta{
+		InsertStmt: stmt,
+	}, nil
+}
+
+// DeleteStmtMeta contains meta information of a DELETE statement.
+type DeleteStmtMeta struct {
+	*ast.DeleteStmt
+}
+
+// NewDeleteStmtMeta create DeleteStmtMeta from *ast.DeleteStmt.
+func NewDeleteStmtMeta(ctx *Context, stmt *ast.DeleteStmt) (*DeleteStmtMeta, error) {
+	return &DeleteStmtMeta{
+		DeleteStmt: stmt,
+	}, nil
+}
+
+// UpdateStmtMeta contains meta information of a UPDATE statement.
+type UpdateStmtMeta struct {
+	*ast.UpdateStmt
+}
+
+// NewUpdateStmtMeta create UpdateStmtMeta from *ast.UpdateStmt.
+func NewUpdateStmtMeta(ctx *Context, stmt *ast.UpdateStmt) (*UpdateStmtMeta, error) {
+	return &UpdateStmtMeta{
+		UpdateStmt: stmt,
+	}, nil
+}
+
 func resultFieldName(rf *ast.ResultField, asIdentifier bool) (string, error) {
 
 	rfName := rf.ColumnAsName.L

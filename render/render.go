@@ -10,7 +10,7 @@ import (
 
 const (
 	RootTemplateName    = ""
-	DefaultTemplateName = "dft"
+	DefaultTemplateName = "default"
 )
 
 // Handler takes context and an object (TableMeta/SelectStmt...) as

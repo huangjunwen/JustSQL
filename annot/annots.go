@@ -26,8 +26,9 @@ type FuncReturnType string
 
 const (
 	ReturnUnknown = FuncReturnType("")
-	ReturnMany    = FuncReturnType("many")
-	ReturnOne     = FuncReturnType("one")
+	// The following are used by SELECT
+	ReturnMany = FuncReturnType("many")
+	ReturnOne  = FuncReturnType("one")
 )
 
 // FuncAnnot declares a wrapper function for a SQL.

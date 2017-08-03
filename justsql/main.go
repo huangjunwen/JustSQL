@@ -303,8 +303,7 @@ func processDML() {
 			default:
 				log.Fatalf("%q: %q (%T) is not an allowed statement type", file, stmt_text, stmt)
 
-			case *ast.SelectStmt:
-
+			case *ast.SelectStmt, *ast.InsertStmt, *ast.DeleteStmt, *ast.UpdateStmt:
 			}
 
 			if err := rctx.Render(stmt, &body); err != nil {

@@ -56,7 +56,7 @@ type {{ $returnType }} struct {
 {{- end }}
 }
 
-const _{{ $funcName }}QueryTmpl = template.Must(template.New({{ printf "%q" $funcName }}).Parse("" +
+var _{{ $funcName }}QueryTmpl = template.Must(template.New({{ printf "%q" $funcName }}).Parse("" +
 {{- range $line := split_lines .Func.Query }}
 	"{{ printf "%s" $line }} " +
 {{- end }}""))

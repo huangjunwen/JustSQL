@@ -58,7 +58,82 @@ func handleSelectStmt(ctx *context.Context, obj interface{}) (interface{}, error
 
 }
 
+func handleInsertStmt(ctx *context.Context, obj interface{}) (interface{}, error) {
+
+	stmt, ok := obj.(*ast.InsertStmt)
+	if !ok {
+		return nil, fmt.Errorf("handleInsertStmt: expect *ast.InsertStmt but got %T", obj)
+	}
+
+	stmtMeta, err := context.NewInsertStmtMeta(ctx, stmt)
+	if err != nil {
+		return nil, err
+	}
+
+	fnMeta, err := annot.NewWrapperFuncMeta(ctx, stmt.Text())
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"Stmt": stmtMeta,
+		"Func": fnMeta,
+	}, nil
+
+}
+
+func handleDeleteStmt(ctx *context.Context, obj interface{}) (interface{}, error) {
+
+	stmt, ok := obj.(*ast.DeleteStmt)
+	if !ok {
+		return nil, fmt.Errorf("handleDeleteStmt: expect *ast.DeleteStmt but got %T", obj)
+	}
+
+	stmtMeta, err := context.NewDeleteStmtMeta(ctx, stmt)
+	if err != nil {
+		return nil, err
+	}
+
+	fnMeta, err := annot.NewWrapperFuncMeta(ctx, stmt.Text())
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"Stmt": stmtMeta,
+		"Func": fnMeta,
+	}, nil
+
+}
+
+func handleUpdateStmt(ctx *context.Context, obj interface{}) (interface{}, error) {
+
+	stmt, ok := obj.(*ast.UpdateStmt)
+	if !ok {
+		return nil, fmt.Errorf("handleUpdateStmt: expect *ast.UpdateStmt but got %T", obj)
+	}
+
+	stmtMeta, err := context.NewUpdateStmtMeta(ctx, stmt)
+	if err != nil {
+		return nil, err
+	}
+
+	fnMeta, err := annot.NewWrapperFuncMeta(ctx, stmt.Text())
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"Stmt": stmtMeta,
+		"Func": fnMeta,
+	}, nil
+
+}
+
 func init() {
 	RegistType("table", (*context.TableMeta)(nil), handleTableMeta)
 	RegistType("select", (*ast.SelectStmt)(nil), handleSelectStmt)
+	RegistType("insert", (*ast.InsertStmt)(nil), handleInsertStmt)
+	RegistType("delete", (*ast.DeleteStmt)(nil), handleDeleteStmt)
+	RegistType("update", (*ast.UpdateStmt)(nil), handleUpdateStmt)
 }
