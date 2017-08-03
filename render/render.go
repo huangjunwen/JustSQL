@@ -145,7 +145,7 @@ func (r *RenderContext) AddTemplate(typeName string, templateName string, templa
 	return nil
 }
 
-// Run render the obj.
+// Render an object.
 func (r *RenderContext) Render(obj interface{}, w io.Writer) error {
 
 	t := reflect.TypeOf(obj)
