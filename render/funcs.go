@@ -38,21 +38,21 @@ func buildFn(fnMap template.FuncMap) func(string) interface{} {
 // A list of strings.
 type Strings []string
 
-func (ss Strings) Add(s string) string {
-	ss = append(ss, s)
+func (ss *Strings) Add(s string) string {
+	*ss = append(*ss, s)
 	return ""
 }
 
-func (ss Strings) Last() string {
-	l := len(ss)
+func (ss *Strings) Last() string {
+	l := len(*ss)
 	if l == 0 {
 		return ""
 	}
-	return ss[l-1]
+	return (*ss)[l-1]
 }
 
-func NewStrings() Strings {
-	return Strings{}
+func NewStrings() *Strings {
+	return &Strings{}
 }
 
 func splitLines(s string) Strings {
@@ -61,7 +61,7 @@ func splitLines(s string) Strings {
 
 // A set of unique strings.
 type UniqueStrings struct {
-	Strings
+	*Strings
 	StringsMap map[string]int
 	Converter  func(string) string
 	Default    string
@@ -74,7 +74,7 @@ func NewUniqueStrings(converter func(string) string, dft string) *UniqueStrings 
 		}
 	}
 	return &UniqueStrings{
-		Strings:    Strings{},
+		Strings:    &Strings{},
 		StringsMap: map[string]int{},
 		Converter:  converter,
 		Default:    dft,
@@ -89,7 +89,7 @@ func (uss *UniqueStrings) Add(s string) string {
 	result := s
 	for i := 1; ; i++ {
 		if _, ok := uss.StringsMap[result]; !ok {
-			uss.StringsMap[result] = len(uss.Strings)
+			uss.StringsMap[result] = len(*uss.Strings)
 			uss.Strings.Add(result)
 			return ""
 		}

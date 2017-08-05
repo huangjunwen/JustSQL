@@ -71,11 +71,12 @@ var _{{ $funcName }}SQLTmpl = template.Must(template.New({{ printf "%q" $funcNam
 {{/* =========================== */}}
 // {{ $funcName }} is generated from:
 //
-{{- range $line := splitLines .Func.SrcQuery }}
+{{- range $line := splitLines .OriginStmt.SelectStmt.Text }}
 {{- if ne (len $line) 0 }}
 //    {{ printf "%s" $line }}
 {{- end }}
 {{- end }}
+//
 func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Func.Args }}, {{ $arg.Name }} {{ $arg.AdaptType }} {{ end }}) ({{ if eq $returnStyle "one" }}*{{ $returnType }}{{ else if eq $returnStyle "many" }}[]*{{ $returnType }}{{ end }}, error) {
 
 	// - Dot object for template and query parameter.
