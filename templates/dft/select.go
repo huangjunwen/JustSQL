@@ -20,9 +20,9 @@ func init() {
 {{/* =========================== */}}
 {{- $funcName := .Func.Name -}}
 {{- $rfs := .Stmt.ResultFields -}}
-{{- $returnType := printf "%sResult" .Func.Name -}}
-{{- $returnTypeFields := uniqueStrings (fn "pascal") "NoNameField" -}}
-{{- $returnTypeFieldsFlatten := strings -}}
+{{- $retName := printf "%sResult" .Func.Name -}}
+{{- $retFieldNames := uniqueStrings (fn "pascal") "NoNameField" -}}
+{{- $retFieldNamesFlatten := strings -}}
 {{- $hasInBinding := .Func.HasInBinding -}}
 {{- $returnStyle := .Func.ReturnStyle -}}
 
@@ -30,8 +30,8 @@ func init() {
 {{/*          return type        */}}
 {{/* =========================== */}}
 
-// {{ $returnType }} is the result type of {{ $funcName }}.
-type {{ $returnType }} struct {
+// {{ $retName }} is the result type of {{ $funcName }}.
+type {{ $retName }} struct {
 {{- range $i, $rf := $rfs -}}
 	{{/* whether this result field is in a normal table wildcard expansion */}}
 	{{- $wildcardTableRefName := $.OriginStmt.FieldList.WildcardTableRefName $i -}}
@@ -40,25 +40,25 @@ type {{ $returnType }} struct {
 
 	{{- if $wildcardTableIsNormal }}
 		{{- if eq $wildcardOffset 0 }}
-			{{- $returnTypeFields.Add $wildcardTableRefName }}
-			{{ $returnTypeFields.Last }} {{ $rf.Table.PascalName }} // {{ $wildcardTableRefName }}.*
+			{{- $retFieldNames.Add $wildcardTableRefName }}
+			{{ $retFieldNames.Last }} {{ $rf.Table.PascalName }} // {{ $wildcardTableRefName }}.*
 		{{- end }}
-		{{- $returnTypeFieldsFlatten.Add (printf "%s.%s" $returnTypeFields.Last $rf.Column.PascalName) }}
+		{{- $retFieldNamesFlatten.Add (printf "%s.%s" $retFieldNames.Last $rf.Column.PascalName) }}
 	{{- else }}
-		{{- $returnTypeFields.Add $rf.Name -}}
+		{{- $retFieldNames.Add $rf.Name -}}
 		{{- if and (or $rf.IsEnum $rf.IsSet) (notNil $rf.Table) }}
-			{{ $returnTypeFields.Last }} {{ $rf.Table.PascalName }}{{ $rf.Column.PascalName }}
+			{{ $retFieldNames.Last }} {{ $rf.Table.PascalName }}{{ $rf.Column.PascalName }}
 		{{- else }}
-			{{ $returnTypeFields.Last }} {{ $rf.AdaptType }}
+			{{ $retFieldNames.Last }} {{ $rf.AdaptType }}
 		{{- end }}
-		{{- $returnTypeFieldsFlatten.Add $returnTypeFields.Last }}
+		{{- $retFieldNamesFlatten.Add $retFieldNames.Last }}
 	{{- end }}
 
 {{- end }}
 }
 
 {{/* =========================== */}}
-{{/*    sql template type        */}}
+{{/*        sql template         */}}
 {{/* =========================== */}}
 
 var _{{ $funcName }}SQLTmpl = template.Must(template.New({{ printf "%q" $funcName }}).Parse("" +
@@ -77,7 +77,7 @@ var _{{ $funcName }}SQLTmpl = template.Must(template.New({{ printf "%q" $funcNam
 {{- end }}
 {{- end }}
 //
-func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Func.Args }}, {{ $arg.Name }} {{ $arg.AdaptType }} {{ end }}) ({{ if eq $returnStyle "one" }}*{{ $returnType }}{{ else if eq $returnStyle "many" }}[]*{{ $returnType }}{{ end }}, error) {
+func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Func.Args }}, {{ $arg.Name }} {{ $arg.AdaptType }} {{ end }}) ({{ if eq $returnStyle "one" }}*{{ $retName }}{{ else if eq $returnStyle "many" }}[]*{{ $retName }}{{ end }}, error) {
 
 	// - Dot object for template and query parameter.
 	dot_ := map[string]interface{}{
@@ -117,8 +117,8 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Func.Arg
 	}
 
 	// - Scan.
-	ret_ := new({{ $returnType }})
-	if err_ := row_.Scan({{ range $i, $field := $returnTypeFieldsFlatten }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $field }}{{ end }}); err != nil {
+	ret_ := new({{ $retName }})
+	if err_ := row_.Scan({{ range $i, $field := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $field }}{{ end }}); err != nil {
 		return nil, err
 	}
 
@@ -132,10 +132,10 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Func.Arg
 	defer rows_.Rows.Close()
 
 	// - Scan.
-	ret_ := make([]*{{ $returnType }}, 0)
+	ret_ := make([]*{{ $retName }}, 0)
 	for rows_.Rows.Next() {
-		r_ := new({{ $returnType }})
-		if err_ := rows_.Rows.Scan({{ range $i, $field := $returnTypeFieldsFlatten }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $field }}{{ end }}); err != nil {
+		r_ := new({{ $retName }})
+		if err_ := rows_.Rows.Scan({{ range $i, $field := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $field }}{{ end }}); err != nil {
 			return nil, err_
 		}
 		ret_ = append(ret_, r_)

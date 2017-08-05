@@ -386,7 +386,7 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 }
 
 // This function expand all wildcards ("*") in a SELECT statement and return
-// an new equivalent one. This is useful since "SELECT * ..." may lead to
+// a new equivalent one. This is useful since "SELECT * ..." may lead to
 // unpredictable error when table is altered.
 func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 
@@ -410,7 +410,7 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 	}
 
 	parts := []string{}
-	textOffset := 0
+	offset := 0
 	for n, field := range stmt.Fields.Fields {
 
 		if field.WildCard == nil {
@@ -420,9 +420,9 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 		errPrefix := fmt.Sprintf("Expand wildcard field[%d]:", n)
 
 		// Save part before this wildcard field.
-		parts = append(parts, text[textOffset:field.Offset])
+		parts = append(parts, text[offset:field.Offset])
 
-		// Calculate this wildcard field length to move textOffset.
+		// Calculate this wildcard field length to move offset.
 		// XXX: field.Text() return "" so i need to construct the field text myself -_-
 		fieldText := "*"
 		if field.WildCard.Table.O != "" {
@@ -435,7 +435,7 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 			return nil, fmt.Errorf("%s strings.HasPrefix(%+q, %+q) == false", errPrefix,
 				text[field.Offset:], fieldText)
 		}
-		textOffset = field.Offset + len(fieldText)
+		offset = field.Offset + len(fieldText)
 
 		// Expand wildcard.
 		tableRefName := ctx.UniqueTableName(field.WildCard.Schema.L, field.WildCard.Table.L)
@@ -481,7 +481,7 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 
 	}
 
-	parts = append(parts, text[textOffset:])
+	parts = append(parts, text[offset:])
 	text = strings.Join(parts, "")
 
 	// Second-re-parse and re-compile.

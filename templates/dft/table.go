@@ -20,7 +20,7 @@ func init() {
 {{/* =========================== */}}
 {{- $tableName := .Table.Name -}}
 {{- $structName := .Table.PascalName -}}
-{{- $structFields := strings -}}
+{{- $structFieldNames := strings -}}
 {{- $cols := .Table.Columns -}}
 {{- $autoIncCol := .Table.AutoIncColumn -}}
 {{- $primaryCols := .Table.PrimaryColumns -}}
@@ -189,11 +189,11 @@ func (s {{ $setName }}) Value() (driver.Value, error) {
 // Table {{ $tableName }}
 type {{ $structName }} struct {
 {{ range $i, $col := $cols }}
-	{{- $structFields.Add $col.PascalName }}
+	{{- $structFieldNames.Add $col.PascalName }}
 	{{- if or $col.IsEnum $col.IsSet }}
-	{{ $structFields.Last }} {{ $structName }}{{ $col.PascalName }}
+	{{ $structFieldNames.Last }} {{ $structName }}{{ $col.PascalName }}
 	{{- else }}
-	{{ $structFields.Last }} {{ $col.AdaptType }}
+	{{ $structFieldNames.Last }} {{ $col.AdaptType }}
 	{{- end -}}
 	{{- " " -}}`+"`db:\"{{ $col.Name }}\"`"+`
 	{{- " " -}}// {{ $col.Name }}
@@ -205,7 +205,7 @@ func (entry_ *{{ $structName }}) Insert(ctx_ {{ $ctx }}.Context, db_ DBer) error
 	sql_ := {{ $sqlx }}.Rebind(BindType,
 		"INSERT INTO {{ $tableName }} ({{ columnNameList $cols }}) VALUES ({{ repeatJoin (len $cols) "?" ", " }})")
 
-	{{ if notNil $autoIncCol }}res_{{ else }}_{{ end }}, err_ := db_.ExecContext(ctx_, sql_{{ range $i, $field := $structFields }}, entry_.{{ $field }}{{ end }})
+	{{ if notNil $autoIncCol }}res_{{ else }}_{{ end }}, err_ := db_.ExecContext(ctx_, sql_{{ range $i, $field := $structFieldNames }}, entry_.{{ $field }}{{ end }})
 	if err_ != nil {
 		return err_
 	}
@@ -230,7 +230,7 @@ func (entry_ *{{ $structName }}) Select(ctx_ {{ $ctx }}.Context, db_ DBer) error
 		"WHERE {{ range $i, $col := $primaryCols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}=? {{ end }}")
 
 	row_ := db_.QueryRowContext(ctx_, sql_{{ range $i, $col := $primaryCols }}, entry_.{{ $col.PascalName }}{{ end }})
-	if err_ := row_.Scan({{ range $i, $field := $structFields }}{{ if ne $i 0 }}, {{ end }}&entry_.{{ $field }}{{ end }}); err_ != nil {
+	if err_ := row_.Scan({{ range $i, $field := $structFieldNames }}{{ if ne $i 0 }}, {{ end }}&entry_.{{ $field }}{{ end }}); err_ != nil {
 		return err_
 	}
 
