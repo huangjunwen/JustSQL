@@ -5,28 +5,29 @@ import (
 )
 
 func init() {
-	t := `
+	render.RegistBuiltinTemplate("select", render.DefaultTemplateName, `
 {{/* =========================== */}}
 {{/*          imports            */}}
 {{/* =========================== */}}
 {{- $ctx := imp "context" -}}
 {{- $sqlx := imp "github.com/jmoiron/sqlx" -}}
+{{- $sql := imp "database/sql" -}}
 {{- $template := imp "text/template" -}}
 {{- $bytes := imp "bytes" -}}
 
 {{/* =========================== */}}
 {{/*          declares           */}}
 {{/* =========================== */}}
-{{- $hasInBinding := .Func.HasInBinding -}}
 {{- $funcName := .Func.Name -}}
 {{- $rfs := .Stmt.ResultFields -}}
 {{- $returnType := printf "%sResult" .Func.Name -}}
-{{- $returnTypeFields := unique_names -}}
-{{- $returnTypeFieldsFlatten := string_arr -}}
-{{- $returnOne := eq .Func.Return "one" -}}
+{{- $returnTypeFields := uniqueStrings (fn "pascal") "NoNameField" -}}
+{{- $returnTypeFieldsFlatten := strings -}}
+{{- $hasInBinding := .Func.HasInBinding -}}
+{{- $returnStyle := .Func.ReturnStyle -}}
 
 {{/* =========================== */}}
-{{/*          main function      */}}
+{{/*          return type        */}}
 {{/* =========================== */}}
 
 // {{ $returnType }} is the result type of {{ $funcName }}.
@@ -42,33 +43,40 @@ type {{ $returnType }} struct {
 			{{- $returnTypeFields.Add $wildcardTableRefName }}
 			{{ $returnTypeFields.Last }} {{ $rf.Table.PascalName }} // {{ $wildcardTableRefName }}.*
 		{{- end }}
-		{{- $returnTypeFieldsFlatten.Push (printf "%s.%s" $returnTypeFields.Last $rf.Column.PascalName) }}
+		{{- $returnTypeFieldsFlatten.Add (printf "%s.%s" $returnTypeFields.Last $rf.Column.PascalName) }}
 	{{- else }}
 		{{- $returnTypeFields.Add $rf.Name -}}
-		{{- if and (or $rf.IsEnum $rf.IsSet) (not_nil $rf.Table) }}
+		{{- if and (or $rf.IsEnum $rf.IsSet) (notNil $rf.Table) }}
 			{{ $returnTypeFields.Last }} {{ $rf.Table.PascalName }}{{ $rf.Column.PascalName }}
 		{{- else }}
 			{{ $returnTypeFields.Last }} {{ $rf.AdaptType }}
 		{{- end }}
-		{{- $returnTypeFieldsFlatten.Push $returnTypeFields.Last }}
+		{{- $returnTypeFieldsFlatten.Add $returnTypeFields.Last }}
 	{{- end }}
 
 {{- end }}
 }
 
-var _{{ $funcName }}QueryTmpl = template.Must(template.New({{ printf "%q" $funcName }}).Parse("" +
-{{- range $line := split_lines .Func.Query }}
+{{/* =========================== */}}
+{{/*    sql template type        */}}
+{{/* =========================== */}}
+
+var _{{ $funcName }}SQLTmpl = template.Must(template.New({{ printf "%q" $funcName }}).Parse("" +
+{{- range $line := splitLines .Func.Query }}
 	"{{ printf "%s" $line }} " +
 {{- end }}""))
 
+{{/* =========================== */}}
+{{/*        main function        */}}
+{{/* =========================== */}}
 // {{ $funcName }} is generated from:
 //
-{{- range $line := split_lines .OriginStmt.SelectStmt.Text }}
+{{- range $line := splitLines .Func.SrcQuery }}
 {{- if ne (len $line) 0 }}
 //    {{ printf "%s" $line }}
 {{- end }}
 {{- end }}
-func {{ $funcName }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg := .Func.Args }}, {{ $arg.Name}} {{ $arg.AdaptType }} {{ end }}) ({{ if $returnOne }}*{{ $returnType }}{{ else }}[]*{{ $returnType }}{{ end }}, error) {
+func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Func.Args }}, {{ $arg.Name }} {{ $arg.AdaptType }} {{ end }}) ({{ if eq $returnStyle "one" }}*{{ $returnType }}{{ else if eq $returnStyle "many" }}[]*{{ $returnType }}{{ end }}, error) {
 
 	// - Dot object for template and query parameter.
 	dot_ := map[string]interface{}{
@@ -79,7 +87,7 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg :
 
 	// - Render from template.
 	buf_ := new(bytes.Buffer)
-	if err_ := _{{ $funcName }}QueryTmpl.Execute(buf_, dot_); err_ != nil {
+	if err_ := _{{ $funcName }}SQLTmpl.Execute(buf_, dot_); err_ != nil {
 		return nil, err_
 	}
 
@@ -98,11 +106,11 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg :
 {{- end }}
 
 	// - Rebind.
-	query_ = tx_.Rebind(query_)
+	query_ = {{ $sqlx }}.Rebind(BindType, query_)
 
-{{ if $returnOne -}}
+{{ if eq $returnStyle "one" -}}
 	// - Query.
-	row_, err_ := tx_.QueryRowxContext(ctx_, query_, args_...)
+	row_, err_ := db_.QueryRowContext(ctx_, query_, args_...)
 	if err_ != nil {
 		return nil, err_
 	}
@@ -114,9 +122,9 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg :
 	}
 
 	return ret_, nil
-{{ else -}}
+{{ else if eq $returnStyle "many" -}}
 	// - Query.
-	rows_, err_ := tx_.QueryxContext(ctx_, query_, args_...)
+	rows_, err_ := db_.QueryContext(ctx_, query_, args_...)
 	if err_ != nil {
 		return nil, err_
 	}
@@ -141,7 +149,6 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, tx_ *{{ $sqlx }}.Tx{{ range $arg :
 {{- end }}
 
 }
+`)
 
-`
-	render.RegistBuiltinTemplate("select", render.DefaultTemplateName, t)
 }

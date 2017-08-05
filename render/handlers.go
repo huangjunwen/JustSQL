@@ -41,13 +41,13 @@ func handleSelectStmt(ctx *context.Context, obj interface{}) (interface{}, error
 	if err != nil {
 		return nil, err
 	}
-	switch fnMeta.Return {
+	switch fnMeta.ReturnStyle {
 	case annot.ReturnMany, annot.ReturnOne:
 	case annot.ReturnUnknown:
 		// Default return many for select.
-		fnMeta.Return = annot.ReturnMany
+		fnMeta.ReturnStyle = annot.ReturnMany
 	default:
-		return nil, fmt.Errorf("Wrapper function's return can't be %+q for SELECT ", fnMeta.Return)
+		return nil, fmt.Errorf("Wrapper function's return can't be %+q for SELECT ", fnMeta.ReturnStyle)
 	}
 
 	return map[string]interface{}{

@@ -22,13 +22,13 @@ func (a *SubsAnnot) Set(key, val string) error {
 	return fmt.Errorf("content: unknown option %+q", key)
 }
 
-type FuncReturnType string
+type ReturnStyle string
 
 const (
-	ReturnUnknown = FuncReturnType("")
+	ReturnUnknown = ReturnStyle("")
 	// The following are used by SELECT
-	ReturnMany = FuncReturnType("many")
-	ReturnOne  = FuncReturnType("one")
+	ReturnMany = ReturnStyle("many")
+	ReturnOne  = ReturnStyle("one")
 )
 
 // FuncAnnot declares a wrapper function for a SQL.
@@ -36,8 +36,8 @@ type FuncAnnot struct {
 	// Function name.
 	Name string
 
-	// Result information.
-	Return FuncReturnType
+	// Return style.
+	ReturnStyle
 }
 
 func (a *FuncAnnot) SetPrimary(val string) error {
@@ -58,9 +58,9 @@ func (a *FuncAnnot) Set(key, val string) error {
 	if key == "return" {
 		switch val {
 		case "many":
-			a.Return = ReturnMany
+			a.ReturnStyle = ReturnMany
 		case "one":
-			a.Return = ReturnOne
+			a.ReturnStyle = ReturnOne
 		default:
 			return fmt.Errorf("func: unknwon return type %+q", val)
 		}
@@ -95,6 +95,34 @@ func (a *ArgAnnot) Set(key, val string) error {
 		return fmt.Errorf("arg: unknown option %+q", key)
 	case "type":
 		a.Type = val
+	case "":
+		return nil
+	}
+	return nil
+}
+
+// Declare a bind option. Defualt to ':'.
+type BindOptAnnot struct {
+	// Prefix of named placeholder in query string.
+	NamePrefix string
+}
+
+func (a *BindOptAnnot) SetPrimary(val string) error {
+	if val != "" {
+		return fmt.Errorf("bindOpt: expect no primary value but got %+q", val)
+	}
+	return nil
+}
+
+func (a *BindOptAnnot) Set(key, val string) error {
+	switch key {
+	default:
+		return fmt.Errorf("bindOpt: unknown option %+q", key)
+	case "namePrefix":
+		if val == "" {
+			return fmt.Errorf("bindOpt: got empty setting for namePrefix")
+		}
+		a.NamePrefix = val
 	case "":
 		return nil
 	}

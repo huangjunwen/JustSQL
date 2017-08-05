@@ -6,9 +6,7 @@ import (
 )
 
 const (
-	DefaultDBName          = "justsql"
-	DefaultPlaceholder     = "?"
-	DefaultNamePlaceholder = ":"
+	DefaultDBName = "justsql"
 )
 
 // Context contains global runtime information of justsql.
@@ -27,10 +25,6 @@ type Context struct {
 
 	// DB types and go types adapter.
 	*TypeAdapter
-
-	// SQL placeholders.
-	Placeholder     string
-	NamePlaceholder string
 }
 
 // NewContext create new Context.
@@ -52,13 +46,11 @@ func NewContext(storePath, dbName string) (*Context, error) {
 	typeAdapter := NewTypeAdapter(scopes)
 
 	return &Context{
-		DB:              db,
-		DBName:          dbName,
-		CachedDBMeta:    make(map[string]*DBMeta),
-		Scopes:          scopes,
-		TypeAdapter:     typeAdapter,
-		Placeholder:     DefaultPlaceholder,
-		NamePlaceholder: DefaultNamePlaceholder,
+		DB:           db,
+		DBName:       dbName,
+		CachedDBMeta: make(map[string]*DBMeta),
+		Scopes:       scopes,
+		TypeAdapter:  typeAdapter,
 	}, nil
 
 }

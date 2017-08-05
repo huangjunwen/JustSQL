@@ -5,80 +5,88 @@ import (
 )
 
 func init() {
-	t := `
+	render.RegistBuiltinTemplate("table", render.DefaultTemplateName, `
 {{/* =========================== */}}
 {{/*          imports            */}}
 {{/* =========================== */}}
 {{- $ctx := imp "context" -}}
 {{- $fmt := imp "fmt" -}}
-{{- $sql := imp "database/sql" -}}
+{{- $sqlx := imp "database/sqlx" -}}
 {{- $driver := imp "database/sql/driver" -}}
 {{- $strings := imp "strings" -}}
 
 {{/* =========================== */}}
 {{/*          declares           */}}
 {{/* =========================== */}}
-{{- $table_name := .Table.PascalName -}}
-{{- $struct_name := .Table.PascalName -}}
+{{- $tableName := .Table.Name -}}
+{{- $structName := .Table.PascalName -}}
+{{- $structFields := strings -}}
 {{- $cols := .Table.Columns -}}
-{{- $auto_inc_col := .Table.AutoIncColumn -}}
-{{- $primary_cols := .Table.PrimaryColumns -}}
-{{- $non_primary_cols := .Table.NonPrimaryColumns -}}
+{{- $autoIncCol := .Table.AutoIncColumn -}}
+{{- $primaryCols := .Table.PrimaryColumns -}}
+{{- $nonPrimaryCols := .Table.NonPrimaryColumns -}}
 
 {{ range $i, $col := $cols }}
 	{{- if $col.IsEnum }}
-{{/* =========================== */}}
-{{/*          enum               */}}
-{{/* =========================== */}}
-{{- $enum_name := printf "%s%s" $struct_name $col.PascalName -}}
+	{{/* =========================== */}}
+	{{/*          enum               */}}
+	{{/* =========================== */}}
+	{{- $enumName := printf "%s%s" $structName $col.PascalName -}}
+	{{- $enumItems := strings -}}
 
-// Enum {{ $enum_name }}.
-type {{ $enum_name }} int
+// Enum {{ $enumName }}.
+type {{ $enumName }} int
 
+// Enum {{ $enumName }} items.
 const (
 	// NULL value.
-	{{ $enum_name }}NULL = {{ $enum_name }}(0)
-{{- range $i, $elem := $col.Elems }}
+	{{ $enumName }}NULL = {{ $enumName }}(0)
+	{{- range $i, $elem := $col.Elems }}
+		{{- if eq $elem "" }}
+			{{- $enumItems.Add (printf "%sEmpty_" $enumName) }}
+		{{- else }}
+			{{- $enumItems.Add (printf "%s%s" $enumName (pascal $elem)) }}
+		{{- end }}
 	// {{ printf "%+q" $elem }}
-	{{ $enum_name }}{{ pascal $elem }} = {{ $enum_name }}({{ $i }} + 1)
-{{- end }}
+	{{ $enumItems.Last }} = {{ $enumName }}({{ $i }} + 1)
+	{{- end }}
 )
 
-func (e {{ $enum_name }}) String() string {
+func (e {{ $enumName }}) String() string {
 	switch e {
-{{- range $i, $elem := $col.Elems }}
-	case {{ $enum_name }}{{ pascal $elem }}:
-		return {{ printf "%+q" $elem }}
-{{- end }}
+	{{- range $i, $item := $enumItems }}
+	case {{ $item }}:
+		return {{ printf "%+q" (index $col.Elems $i) }}
+	{{- end }}
 	}
 	return ""
 }
 
-func (e {{ $enum_name }}) Valid() bool {
+func (e {{ $enumName }}) Valid() bool {
 	return int(e) > 0 && int(e) <= {{ printf "%d" (len $col.Elems) }}
 }
 
 // Scan implements database/sql.Scanner interface.
-func (e *{{ $enum_name }}) Scan(value interface{}) error {
+func (e *{{ $enumName }}) Scan(value interface{}) error {
 	if value == nil {
-		*e = {{ $enum_name }}NULL
+		*e = {{ $enumName }}NULL
 		return nil
 	}
 
 	switch s := string(value.([]byte)); s {
-{{- range $i, $elem := $col.Elems }}
+	{{- range $i, $elem := $col.Elems }}
 	case {{ printf "%+q" $elem }}:
-		*e = {{ $enum_name }}{{ pascal $elem }}
-{{- end }}
+		*e = {{ index $enumItems $i }}
+	{{- end }}
 	default:
-		return {{ $fmt }}.Errorf("Unexpected value for {{ $enum_name }}: %+q", s)
+		return {{ $fmt }}.Errorf("Unexpected value for {{ $enumName }}: %+q", s)
 	}
 
 	return nil
 }
 
 // Value implements database/sql/driver.Valuer interface.
-func (e {{ $enum_name }}) Value() (driver.Value, error) {
+func (e {{ $enumName }}) Value() (driver.Value, error) {
 	if !e.Valid() {
 		return nil, nil
 	}
@@ -86,53 +94,60 @@ func (e {{ $enum_name }}) Value() (driver.Value, error) {
 }
 
 	{{- else if $col.IsSet }}
-{{/* =========================== */}}
-{{/*          set                */}}
-{{/* =========================== */}}
-{{- $set_name := printf "%s%s" $struct_name $col.PascalName -}}
+	{{/* =========================== */}}
+	{{/*          set                */}}
+	{{/* =========================== */}}
+	{{- $setName := printf "%s%s" $structName $col.PascalName -}}
+	{{- $setItems := strings -}}
 
-// Set {{ $set_name }}.
-type {{ $set_name }} struct {
+// Set {{ $setName }}.
+type {{ $setName }} struct {
 	val uint64 // Up to 64 distinct members. See https://dev.mysql.com/doc/refman/5.7/en/set.html
 	valid bool // NULL if valid is false.
 }
 
+// Set {{ $setName }} items.
 const (
-{{- range $i, $elem := $col.Elems }}
+	{{- range $i, $elem := $col.Elems }}
+		{{- if eq $elem "" }}
+			{{- $setItems.Add (printf "%sEmpty_" $setName) }}
+		{{- else }}
+			{{- $setItems.Add (printf "%s%s" $setName (pascal $elem)) }}
+		{{- end }}
 	// {{ printf "%+q" $elem }}
-	{{ $set_name }}{{ pascal $elem }} = uint64(1<<{{ $i }})
-{{- end }}
+	{{ $setItems.Last }} = uint64(1<<{{ $i }})
+	{{- end }}
 )
 
-func New{{ $set_name }}(items ...uint64) {{ $set_name }} {
+func New{{ $setName }}(items ...uint64) {{ $setName }} {
 	var val uint64 = 0
 	for _, item := range items {
 		if item > 0 && (item & (item - 1)) == 0 && item <= (1 << ({{ len $col.Elems }} - 1)) {
 			val |= item 
 		}
 	}
-	return {{ $set_name }}{
+	return {{ $setName }}{
 		val: val,
 		valid: true,
 	}
 }
 
-func (s {{ $set_name }}) String() string {
+func (s {{ $setName }}) String() string {
 	parts := make([]string, 0)
-{{- range $i, $elem := $col.Elems }}
-	if s.val & {{ $set_name }}{{ pascal $elem }} != 0 {
-		parts = append(parts, {{ printf "%+q" $elem }})
+	{{- range $i, $item:= $setItems }}
+	if s.val & {{ $item }} != 0 {
+		parts = append(parts, {{ printf "%+q" (index $col.Elems $i) }})
 	}
-{{- end }}
+	{{- end }}
 	return strings.Join(parts, ",")
 }
 
-func (s {{ $set_name }}) Valid() bool {
+func (s {{ $setName }}) Valid() bool {
 	return s.valid
 }
 
 // Scan implements database/sql.Scanner interface.
-func (s *{{ $set_name }}) Scan(value interface{}) error {
+func (s *{{ $setName }}) Scan(value interface{}) error {
 	if value == nil {
 		s.val = 0
 		s.valid = false
@@ -142,12 +157,12 @@ func (s *{{ $set_name }}) Scan(value interface{}) error {
 	var val uint64 = 0
 	for _, part := range {{ $strings }}.Split(string(value.([]byte)), ",") {
 		switch part {
-{{- range $i, $elem := $col.Elems }}
+	{{- range $i, $elem := $col.Elems }}
 		case {{ printf "%+q" $elem }}:
-			val |= {{ $set_name }}{{ pascal $elem }}
-{{- end }}
+			val |= {{ index $setItems $i }}
+	{{- end }}
 		default:
-			return {{ $fmt }}.Errorf("Unexpected value for {{ $set_name }}: %+q", part)
+			return {{ $fmt }}.Errorf("Unexpected value for {{ $setName }}: %+q", part)
 		}
 	}
 
@@ -157,7 +172,7 @@ func (s *{{ $set_name }}) Scan(value interface{}) error {
 }
 
 // Value implements database/sql/driver.Valuer interface.
-func (s {{ $set_name }}) Value() (driver.Value, error) {
+func (s {{ $setName }}) Value() (driver.Value, error) {
 	if !s.Valid() {
 		return nil, nil
 	}
@@ -171,80 +186,90 @@ func (s {{ $set_name }}) Value() (driver.Value, error) {
 {{/* =========================== */}}
 {{/*          main struct        */}}
 {{/* =========================== */}}
-// Table {{ $table_name }}
-type {{ $struct_name }} struct {
+// Table {{ $tableName }}
+type {{ $structName }} struct {
 {{ range $i, $col := $cols }}
+	{{- $structFields.Add $col.PascalName }}
 	{{- if or $col.IsEnum $col.IsSet }}
-	{{ $col.PascalName }} {{ $struct_name }}{{ $col.PascalName }}
+	{{ $structFields.Last }} {{ $structName }}{{ $col.PascalName }}
 	{{- else }}
-	{{ $col.PascalName }} {{ $col.AdaptType }}
+	{{ $structFields.Last }} {{ $col.AdaptType }}
 	{{- end -}}
-	{{- " " -}}// {{ $col.Name }}: {{ if $col.IsNotNULL }}NOT NULL;{{ else }}NULL;{{ end }}{{ if $col.IsAutoInc }} AUTO INCREMENT;{{ end }} DEFAULT {{ printf "%#v" $col.DefaultValue }};{{ if $col.IsOnUpdateNow }} ON UPDATE "CURRENT_TIMESTAMP";{{ end }}
+	{{- " " -}}`+"`db:\"{{ $col.Name }}\"`"+`
+	{{- " " -}}// {{ $col.Name }}
 {{- end }}
 }
 
-func (entry_ *{{ $struct_name }}) Insert(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
-	const sql_ = "INSERT INTO {{ $table_name }} ({{ printf "%s" (column_name_list $cols) }}) VALUES ({{ printf "%s" (placeholder_list (len $cols)) }})"
+func (entry_ *{{ $structName }}) Insert(ctx_ {{ $ctx }}.Context, db_ DBer) error {
 
-	{{ if not_nil $auto_inc_col }}res_{{ else }}_{{ end }}, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $cols }}, entry_.{{ $col.Name }}{{ end }})
+	sql_ := {{ $sqlx }}.Rebind(BindType,
+		"INSERT INTO {{ $tableName }} ({{ columnNameList $cols }}) VALUES ({{ repeatJoin (len $cols) "?" ", " }})")
+
+	{{ if notNil $autoIncCol }}res_{{ else }}_{{ end }}, err_ := db_.ExecContext(ctx_, sql_{{ range $i, $field := $structFields }}, entry_.{{ $field }}{{ end }})
 	if err_ != nil {
 		return err_
 	}
 
-	{{ if not_nil $auto_inc_col -}}
-	last_insert_id_, err_ := res_.LastInsertId()
+	{{ if notNil $autoIncCol -}}
+	lastInsertId_, err_ := res_.LastInsertId()
 	if err_ != nil {
 		return err_
 	}
 
-	entry_.{{ $auto_inc_col.PascalName }} = {{ $auto_inc_col.AdaptType }}(last_insert_id_)
+	entry_.{{ $autoIncCol.PascalName }} = {{ $autoIncCol.AdaptType }}(lastInsertId_)
 	{{ end -}}
 
 	return nil
 }
 
-{{ if ne (len $primary_cols) 0 -}}
+{{ if ne (len $primaryCols) 0 -}}
 
-func (entry_ *{{ $struct_name }}) Select(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
-	const sql_ = "SELECT {{ printf "%s" (column_name_list $cols) }} FROM {{ $table_name }} " +
-		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}={{ placeholder }} {{ end }}"
+func (entry_ *{{ $structName }}) Select(ctx_ {{ $ctx }}.Context, db_ DBer) error {
 
-	row_ := tx_.QueryRowContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.PascalName }}{{ end }})
-	if err_ := row_.Scan({{ range $i, $col := $cols }}{{ if ne $i 0 }}, {{ end }}&entry_.{{ $col.PascalName }}{{ end }}); err_ != nil {
+	sql_ := {{ $sqlx }}.Rebind(BindType, "SELECT {{ columnNameList $cols }} FROM {{ $tableName }} " +
+		"WHERE {{ range $i, $col := $primaryCols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}=? {{ end }}")
+
+	row_ := db_.QueryRowContext(ctx_, sql_{{ range $i, $col := $primaryCols }}, entry_.{{ $col.PascalName }}{{ end }})
+	if err_ := row_.Scan({{ range $i, $field := $structFields }}{{ if ne $i 0 }}, {{ end }}&entry_.{{ $field }}{{ end }}); err_ != nil {
 		return err_
 	}
 
 	return nil
 }
 
-{{ if ne (len $non_primary_cols) 0 -}}
-func (entry_ *{{ $struct_name }}) Update(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
-	const sql_ = "UPDATE {{ $table_name }} SET {{ range $i, $col := $non_primary_cols }}{{ if ne $i 0 }}, {{ end }}{{ $col.Name }}={{ placeholder }}{{ end }}" +
-		" WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}={{ placeholder }} {{ end }}"
+{{ if ne (len $nonPrimaryCols) 0 -}}
+func (entry_ *{{ $structName }}) Update(ctx_ {{ $ctx }}.Context, db_ DBer) (int64, error) {
 
-	_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $non_primary_cols }}, entry_.{{ $col.PascalName }}{{ end }}{{ range $i, $col := $primary_cols }}, entry_.{{ $col.PascalName }}{{ end }})
+	sql_ := {{ $sqlx }}.Rebind(BindType,
+		"UPDATE {{ $tableName }} SET {{ range $i, $col := $nonPrimaryCols }}{{ if ne $i 0 }}, {{ end }}{{ $col.Name }}=?{{ end }}" +
+		" WHERE {{ range $i, $col := $primaryCols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}=? {{ end }}")
+
+	r_, err_ := db_.ExecContext(ctx_, sql_{{ range $i, $col := $nonPrimaryCols }}, entry_.{{ $col.PascalName }}{{ end }}{{ range $i, $col := $primaryCols }}, entry_.{{ $col.PascalName }}{{ end }})
 	if err_ != nil {
-		return err_
+		return 0, err_
 	}
 
-	return nil
+	return r_.RowsAffected()
+
 }
 {{ end }}
 
-func (entry_ *{{ $struct_name }}) Delete(ctx_ {{ $ctx }}.Context, tx_ *{{ $sql }}.Tx) error {
-	const sql_ = "DELETE FROM {{ $table_name }} " +
-		"WHERE {{ range $i, $col := $primary_cols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}={{ placeholder }} {{ end }}"
+func (entry_ *{{ $structName }}) Delete(ctx_ {{ $ctx }}.Context, db_ DBer) (int64, error) {
 
-	_, err_ := tx_.ExecContext(ctx_, sql_{{ range $i, $col := $primary_cols }}, entry_.{{ $col.PascalName }}{{ end }})
+	sql_ := {{ $sqlx }}.Rebind(BindType,
+		"DELETE FROM {{ $tableName }} " +
+		"WHERE {{ range $i, $col := $primaryCols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}=? {{ end }}")
+
+	r_, err_ := db_.ExecContext(ctx_, sql_{{ range $i, $col := $primaryCols }}, entry_.{{ $col.PascalName }}{{ end }})
 	if err_ != nil {
-		return err_
+		return 0, err_
 	}
 
-	return nil
+	return r_.RowsAffected()
 }
 
 {{ end }}
 
-`
-	render.RegistBuiltinTemplate("table", render.DefaultTemplateName, t)
+`)
+
 }

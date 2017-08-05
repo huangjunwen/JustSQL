@@ -32,11 +32,17 @@ type WrapperFuncMeta struct {
 	// Wrapper arguments.
 	Args []WrapperFuncArgMeta
 
+	// Return style.
+	ReturnStyle
+
 	// Has "IN (?)" binding?
 	HasInBinding bool
 
-	// Return type.
-	Return FuncReturnType
+	// Prefix of named placeholder.
+	BindingNamePrefix string
+
+	// Internal fields.
+	_bindingProcessed bool
 }
 
 var noNameCnt int = 0
@@ -71,7 +77,7 @@ func NewWrapperFuncMeta(ctx *context.Context, srcQuery string) (*WrapperFuncMeta
 
 		case *FuncAnnot:
 			ret.Name = a.Name
-			ret.Return = a.Return
+			ret.ReturnStyle = a.ReturnStyle
 
 		case *ArgAnnot:
 			ret.Args = append(ret.Args, WrapperFuncArgMeta{
@@ -79,17 +85,31 @@ func NewWrapperFuncMeta(ctx *context.Context, srcQuery string) (*WrapperFuncMeta
 				AdaptType: ctx.Scopes.CreateTypeNameFromSpec(a.Type),
 			})
 
+		case *BindOptAnnot:
+			if ret._bindingProcessed {
+				return nil, fmt.Errorf("bindOpt: should take place before bind")
+			}
+			if ret.BindingNamePrefix != "" {
+				return nil, fmt.Errorf("bindOpt: namePrefix already set as %+q", ret.BindingNamePrefix)
+			}
+			ret.BindingNamePrefix = a.NamePrefix
+
 		case *BindAnnot:
 			// Find the next comment.
 			i += 1
 			if i >= len(comments) {
 				return nil, fmt.Errorf("bind: %q missing enclosure", a.Name)
 			}
-			parts = append(parts, fmt.Sprintf("%s%s", ctx.NamePlaceholder, a.Name))
-			comment = comments[i]
+			namePrefix := ret.BindingNamePrefix
+			if namePrefix == "" {
+				namePrefix = ":"
+			}
+			parts = append(parts, fmt.Sprintf("%s%s", namePrefix, a.Name))
 			if a.In {
 				ret.HasInBinding = true
 			}
+			ret._bindingProcessed = true
+			comment = comments[i]
 
 		default:
 		}
