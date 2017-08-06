@@ -9,7 +9,8 @@ const (
 	DefaultDBName = "justsql"
 )
 
-// Context contains global runtime information of justsql.
+// Context contains an embeded database (tidb), extracted database meta
+// information and some global information.
 type Context struct {
 	// The embeded db.
 	DB *EmbedDB
@@ -19,12 +20,6 @@ type Context struct {
 
 	// Database name -> cached DBMeta
 	CachedDBMeta map[string]*DBMeta
-
-	// File scopes.
-	*Scopes
-
-	// DB types and go types adapter.
-	*TypeAdapter
 }
 
 // NewContext create new Context.
@@ -42,15 +37,10 @@ func NewContext(storePath, dbName string) (*Context, error) {
 	db.MustExecute(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName))
 	db.MustExecute(fmt.Sprintf("USE %s", dbName))
 
-	scopes := NewScopes()
-	typeAdapter := NewTypeAdapter(scopes)
-
 	return &Context{
 		DB:           db,
 		DBName:       dbName,
 		CachedDBMeta: make(map[string]*DBMeta),
-		Scopes:       scopes,
-		TypeAdapter:  typeAdapter,
 	}, nil
 
 }

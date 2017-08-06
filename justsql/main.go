@@ -44,7 +44,7 @@ var (
 	// Global variables.
 	package_name string
 	ctx          *context.Context
-	rctx         *render.RenderContext
+	renderer     *render.Renderer
 )
 
 func parseOptionsAndInit() {
@@ -101,7 +101,7 @@ func parseOptionsAndInit() {
 	}
 
 	// Init render context.
-	rctx, err = render.NewRenderContext(ctx)
+	renderer, err = render.NewRenderer(ctx)
 	if err != nil {
 		log.Fatalf("NewRenderContext: %s", err)
 	}
@@ -127,7 +127,7 @@ import (
 func writeOutputFileHead(w io.Writer) error {
 	return pkg_file_head_tmpl.Execute(w, map[string]interface{}{
 		"PackageName": package_name,
-		"Imports":     ctx.Scopes.CurrScope().ListPkg(),
+		"Imports":     renderer.Scopes.CurrScope().ListPkg(),
 	})
 }
 
@@ -264,10 +264,10 @@ func exportTables() {
 		log.Infof("exportTable(%q) ...", table_meta.Name)
 
 		scope := fmt.Sprintf("%s.tb.go", table_meta.Name)
-		ctx.Scopes.SwitchScope(scope)
+		renderer.Scopes.SwitchScope(scope)
 
 		var body bytes.Buffer
-		if err := rctx.Render(table_meta, &body); err != nil {
+		if err := renderer.Render(table_meta, &body); err != nil {
 			log.Fatalf("render.Render(%q): %s", scope, err)
 		}
 
@@ -284,7 +284,7 @@ func processDML() {
 	for file, content, ok := iter(); ok; file, content, ok = iter() {
 
 		scope := fmt.Sprintf("%s.go", filepath.Base(file))
-		ctx.Scopes.SwitchScope(file)
+		renderer.Scopes.SwitchScope(file)
 
 		var body bytes.Buffer
 
@@ -306,7 +306,7 @@ func processDML() {
 			case *ast.SelectStmt, *ast.InsertStmt, *ast.DeleteStmt, *ast.UpdateStmt:
 			}
 
-			if err := rctx.Render(stmt, &body); err != nil {
+			if err := renderer.Render(stmt, &body); err != nil {
 				log.Fatalf("render.Render(%q): %s", stmt_text, err)
 			}
 

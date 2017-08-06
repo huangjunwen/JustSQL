@@ -13,9 +13,9 @@ const (
 	DefaultTemplateName = "default"
 )
 
-// Handler takes context and an object (TableMeta/SelectStmt...) as
+// Handler takes a renderer and an object (TableMeta/SelectStmt...) as
 // parameters, returns an object (the 'dot' object) for template renderring.
-type Handler func(*context.Context, interface{}) (interface{}, error)
+type Handler func(*Renderer, interface{}) (interface{}, error)
 
 // Builtin mapping.
 var (
@@ -25,7 +25,7 @@ var (
 	handlerMap map[reflect.Type]Handler = make(map[reflect.Type]Handler)
 	// Map type -> (template name -> template content)
 	templateMap map[reflect.Type]map[string]string = make(map[reflect.Type]map[string]string)
-	// True if RenderContext has been created.
+	// True if Renderer has been created.
 	initialized = false
 )
 
@@ -73,10 +73,19 @@ func RegistBuiltinTemplate(typeName string, templateName string, templateContent
 
 }
 
-// RenderContext contain information to render objects.
-type RenderContext struct {
+// Renderer contain information to render objects.
+type Renderer struct {
 	// Global context.
 	*context.Context
+
+	// Which file is renderring.
+	*Scopes
+
+	// Go type adapter.
+	*TypeAdapter
+
+	// Extra functions used in templates.
+	ExtraFuncs template.FuncMap
 
 	// Root template is empty template used to create
 	// associated templates, see http://golang.org/pkg/text/template/#hdr-Associated_templates
@@ -84,23 +93,23 @@ type RenderContext struct {
 
 	// Templates used to render object.
 	Templates map[reflect.Type]*template.Template
-
-	// Extra functions used in templates.
-	ExtraFuncs template.FuncMap
 }
 
-// NewRenderContext create RenderContext from Context.
-func NewRenderContext(ctx *context.Context) (*RenderContext, error) {
+// NewRenderer create Renderer from Context.
+func NewRenderer(ctx *context.Context) (*Renderer, error) {
 
 	// Mark initialized.
 	initialized = true
 
-	ret := &RenderContext{
+	ret := &Renderer{
 		Context:       ctx,
+		Scopes:        NewScopes(),
 		RootTemplates: make(map[reflect.Type]*template.Template),
 		Templates:     make(map[reflect.Type]*template.Template),
-		ExtraFuncs:    BuildExtraFuncs(ctx),
 	}
+
+	ret.TypeAdapter = NewTypeAdapter(ret.Scopes)
+	ret.ExtraFuncs = BuildExtraFuncs(ret)
 
 	for _, t := range typeMap {
 		// Create empty root template for each registered type.
@@ -125,7 +134,7 @@ func NewRenderContext(ctx *context.Context) (*RenderContext, error) {
 
 // AddTemplate add a template for a type with the given name.
 // This latest added template is used as the main template to render the given type.
-func (r *RenderContext) AddTemplate(typeName string, templateName string, templateContent string) error {
+func (r *Renderer) AddTemplate(typeName string, templateName string, templateContent string) error {
 
 	// Check type.
 	t, ok := typeMap[typeName]
@@ -146,7 +155,7 @@ func (r *RenderContext) AddTemplate(typeName string, templateName string, templa
 }
 
 // Render an object.
-func (r *RenderContext) Render(obj interface{}, w io.Writer) error {
+func (r *Renderer) Render(obj interface{}, w io.Writer) error {
 
 	t := reflect.TypeOf(obj)
 
@@ -157,7 +166,7 @@ func (r *RenderContext) Render(obj interface{}, w io.Writer) error {
 	}
 
 	// Generate 'dot' object.
-	dot, err := handlerMap[t](r.Context, obj)
+	dot, err := handlerMap[t](r, obj)
 	if err != nil {
 		return err
 	}

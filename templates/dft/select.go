@@ -49,7 +49,7 @@ type {{ $retName }} struct {
 		{{- if and (or $rf.IsEnum $rf.IsSet) (notNil $rf.Table) }}
 			{{ $retFieldNames.Last }} {{ $rf.Table.PascalName }}{{ $rf.Column.PascalName }}
 		{{- else }}
-			{{ $retFieldNames.Last }} {{ $rf.AdaptType }}
+			{{ $retFieldNames.Last }} {{ typeName $rf.Type }}
 		{{- end }}
 		{{- $retFieldNamesFlatten.Add $retFieldNames.Last }}
 	{{- end }}
@@ -77,7 +77,7 @@ var _{{ $funcName }}SQLTmpl = template.Must(template.New({{ printf "%q" $funcNam
 {{- end }}
 {{- end }}
 //
-func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Func.Args }}, {{ $arg.Name }} {{ $arg.AdaptType }} {{ end }}) ({{ if eq $returnStyle "one" }}*{{ $retName }}{{ else if eq $returnStyle "many" }}[]*{{ $retName }}{{ end }}, error) {
+func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Func.Args }}, {{ $arg.Name }} {{ typeName $arg.Type }} {{ end }}) ({{ if eq $returnStyle "one" }}*{{ $retName }}{{ else if eq $returnStyle "many" }}[]*{{ $retName }}{{ end }}, error) {
 
 	// - Dot object for template and query parameter.
 	dot_ := map[string]interface{}{

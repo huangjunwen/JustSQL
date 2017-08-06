@@ -17,10 +17,7 @@ type ResultFieldMeta struct {
 	Name string
 
 	// Field type.
-	Type types.FieldType
-
-	// Go type to store this field.
-	AdaptType *TypeName
+	Type *types.FieldType
 
 	// If this is a field from table column.
 	// The following will have values.
@@ -52,8 +49,7 @@ func NewResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, er
 	return &ResultFieldMeta{
 		ResultField: rf,
 		Name:        name,
-		Type:        rf.Column.FieldType,
-		AdaptType:   ctx.TypeAdapter.AdaptType(&rf.Column.FieldType),
+		Type:        &rf.Column.FieldType,
 		Table:       table,
 		Column:      column,
 	}, nil

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/huangjunwen/JustSQL/context"
 	"github.com/huangjunwen/JustSQL/utils"
+	ts "github.com/pingcap/tidb/util/types"
 	"reflect"
 	"strings"
 	"text/template"
@@ -112,9 +113,22 @@ func repeatJoin(n int, s string, sep string) string {
 // --- Source code helpers ---
 
 // Import pkg into the renderred source code.
-func buildImp(ctx *context.Context) func(string) *context.PkgName {
-	return func(pkgPath string) *context.PkgName {
-		return ctx.Scopes.CreatePkgName(pkgPath)
+func buildImp(r *Renderer) func(string) *PkgName {
+	return func(pkgPath string) *PkgName {
+		return r.Scopes.CreatePkgName(pkgPath)
+	}
+}
+
+func buildTypeName(r *Renderer) func(interface{}) (*TypeName, error) {
+	return func(val interface{}) (*TypeName, error) {
+		switch v := val.(type) {
+		case *ts.FieldType:
+			return r.TypeAdapter.AdaptType(v), nil
+		case string:
+			return r.Scopes.CreateTypeNameFromSpec(v), nil
+		default:
+			return nil, fmt.Errorf("typeName: not support %T as argument", v)
+		}
 	}
 }
 
@@ -129,7 +143,7 @@ func columnNameList(cols []*context.ColumnMeta) string {
 	return strings.Join(parts, ", ")
 }
 
-func BuildExtraFuncs(ctx *context.Context) template.FuncMap {
+func BuildExtraFuncs(r *Renderer) template.FuncMap {
 
 	fnMap := template.FuncMap{
 		// General helpers.
@@ -142,7 +156,8 @@ func BuildExtraFuncs(ctx *context.Context) template.FuncMap {
 		"uniqueStrings": NewUniqueStrings,
 		"repeatJoin":    repeatJoin,
 		// Source code helpers.
-		"imp": buildImp(ctx),
+		"imp":      buildImp(r),
+		"typeName": buildTypeName(r),
 		// Database helpers.
 		"columnNameList": columnNameList,
 	}

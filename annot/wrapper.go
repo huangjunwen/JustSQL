@@ -2,18 +2,8 @@ package annot
 
 import (
 	"fmt"
-	"github.com/huangjunwen/JustSQL/context"
 	"strings"
 )
-
-// WrapperFuncArgMeta contains wrapper function argument meta information.
-type WrapperFuncArgMeta struct {
-	// Name of the arg.
-	Name string
-
-	// Type of the arg.
-	AdaptType *context.TypeName
-}
 
 // WrapperFuncArgMeta contains wrapper function meta information.
 type WrapperFuncMeta struct {
@@ -30,7 +20,7 @@ type WrapperFuncMeta struct {
 	Name string
 
 	// Wrapper arguments.
-	Args []WrapperFuncArgMeta
+	Args []*ArgAnnot
 
 	// Return style.
 	ReturnStyle
@@ -48,12 +38,12 @@ type WrapperFuncMeta struct {
 var noNameCnt int = 0
 
 // NewWrapperFuncMeta gather wrapper meta from source query's comments (annotations).
-func NewWrapperFuncMeta(ctx *context.Context, srcQuery string) (*WrapperFuncMeta, error) {
+func NewWrapperFuncMeta(srcQuery string) (*WrapperFuncMeta, error) {
 
 	ret := &WrapperFuncMeta{
 		SrcQuery: srcQuery,
 		Comments: make([]Comment, 0),
-		Args:     make([]WrapperFuncArgMeta, 0),
+		Args:     make([]*ArgAnnot, 0),
 	}
 
 	comments, err := ScanComment(srcQuery)
@@ -80,10 +70,7 @@ func NewWrapperFuncMeta(ctx *context.Context, srcQuery string) (*WrapperFuncMeta
 			ret.ReturnStyle = a.ReturnStyle
 
 		case *ArgAnnot:
-			ret.Args = append(ret.Args, WrapperFuncArgMeta{
-				Name:      a.Name,
-				AdaptType: ctx.Scopes.CreateTypeNameFromSpec(a.Type),
-			})
+			ret.Args = append(ret.Args, a)
 
 		case *BindOptAnnot:
 			if ret._bindingProcessed {

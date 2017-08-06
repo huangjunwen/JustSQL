@@ -7,7 +7,7 @@ import (
 	"github.com/pingcap/tidb/ast"
 )
 
-func handleTableMeta(ctx *context.Context, obj interface{}) (interface{}, error) {
+func handleTableMeta(r *Renderer, obj interface{}) (interface{}, error) {
 
 	tableMeta, ok := obj.(*context.TableMeta)
 	if !ok {
@@ -20,7 +20,9 @@ func handleTableMeta(ctx *context.Context, obj interface{}) (interface{}, error)
 	}, nil
 }
 
-func handleSelectStmt(ctx *context.Context, obj interface{}) (interface{}, error) {
+func handleSelectStmt(r *Renderer, obj interface{}) (interface{}, error) {
+
+	ctx := r.Context
 
 	originStmt, ok := obj.(*ast.SelectStmt)
 	if !ok {
@@ -37,7 +39,7 @@ func handleSelectStmt(ctx *context.Context, obj interface{}) (interface{}, error
 		return nil, err
 	}
 
-	fnMeta, err := annot.NewWrapperFuncMeta(ctx, stmtMeta.SelectStmt.Text())
+	fnMeta, err := annot.NewWrapperFuncMeta(stmtMeta.SelectStmt.Text())
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +60,9 @@ func handleSelectStmt(ctx *context.Context, obj interface{}) (interface{}, error
 
 }
 
-func handleInsertStmt(ctx *context.Context, obj interface{}) (interface{}, error) {
+func handleInsertStmt(r *Renderer, obj interface{}) (interface{}, error) {
+
+	ctx := r.Context
 
 	stmt, ok := obj.(*ast.InsertStmt)
 	if !ok {
@@ -70,7 +74,7 @@ func handleInsertStmt(ctx *context.Context, obj interface{}) (interface{}, error
 		return nil, err
 	}
 
-	fnMeta, err := annot.NewWrapperFuncMeta(ctx, stmt.Text())
+	fnMeta, err := annot.NewWrapperFuncMeta(stmt.Text())
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +86,9 @@ func handleInsertStmt(ctx *context.Context, obj interface{}) (interface{}, error
 
 }
 
-func handleDeleteStmt(ctx *context.Context, obj interface{}) (interface{}, error) {
+func handleDeleteStmt(r *Renderer, obj interface{}) (interface{}, error) {
+
+	ctx := r.Context
 
 	stmt, ok := obj.(*ast.DeleteStmt)
 	if !ok {
@@ -94,7 +100,7 @@ func handleDeleteStmt(ctx *context.Context, obj interface{}) (interface{}, error
 		return nil, err
 	}
 
-	fnMeta, err := annot.NewWrapperFuncMeta(ctx, stmt.Text())
+	fnMeta, err := annot.NewWrapperFuncMeta(stmt.Text())
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +112,9 @@ func handleDeleteStmt(ctx *context.Context, obj interface{}) (interface{}, error
 
 }
 
-func handleUpdateStmt(ctx *context.Context, obj interface{}) (interface{}, error) {
+func handleUpdateStmt(r *Renderer, obj interface{}) (interface{}, error) {
+
+	ctx := r.Context
 
 	stmt, ok := obj.(*ast.UpdateStmt)
 	if !ok {
@@ -118,7 +126,7 @@ func handleUpdateStmt(ctx *context.Context, obj interface{}) (interface{}, error
 		return nil, err
 	}
 
-	fnMeta, err := annot.NewWrapperFuncMeta(ctx, stmt.Text())
+	fnMeta, err := annot.NewWrapperFuncMeta(stmt.Text())
 	if err != nil {
 		return nil, err
 	}

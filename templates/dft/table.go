@@ -193,7 +193,7 @@ type {{ $structName }} struct {
 	{{- if or $col.IsEnum $col.IsSet }}
 	{{ $structFieldNames.Last }} {{ $structName }}{{ $col.PascalName }}
 	{{- else }}
-	{{ $structFieldNames.Last }} {{ $col.AdaptType }}
+	{{ $structFieldNames.Last }} {{ typeName $col.Type }}
 	{{- end -}}
 	{{- " " -}}`+"`db:\"{{ $col.Name }}\"`"+`
 	{{- " " -}}// {{ $col.Name }}
@@ -216,7 +216,7 @@ func (entry_ *{{ $structName }}) Insert(ctx_ {{ $ctx }}.Context, db_ DBer) error
 		return err_
 	}
 
-	entry_.{{ $autoIncCol.PascalName }} = {{ $autoIncCol.AdaptType }}(lastInsertId_)
+	entry_.{{ $autoIncCol.PascalName }} = {{ typeName $autoIncCol.Type }}(lastInsertId_)
 	{{ end -}}
 
 	return nil

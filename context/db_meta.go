@@ -173,10 +173,7 @@ type ColumnMeta struct {
 	Offset int
 
 	// Column field type.
-	Type types.FieldType
-
-	// Go type to store this field.
-	AdaptType *TypeName
+	Type *types.FieldType
 }
 
 func NewColumnMeta(ctx *Context, columnInfo *model.ColumnInfo) (*ColumnMeta, error) {
@@ -185,8 +182,7 @@ func NewColumnMeta(ctx *Context, columnInfo *model.ColumnInfo) (*ColumnMeta, err
 		Name:       columnInfo.Name.L,
 		PascalName: utils.PascalCase(columnInfo.Name.L),
 		Offset:     columnInfo.Offset,
-		Type:       columnInfo.FieldType,
-		AdaptType:  ctx.TypeAdapter.AdaptType(&columnInfo.FieldType),
+		Type:       &columnInfo.FieldType,
 	}, nil
 }
 
