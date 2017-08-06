@@ -23,6 +23,8 @@ func init() {
 {{- $retName := printf "%sResult" .Annot.FuncName -}}
 {{- $retFieldNames := uniqueStrings (fn "pascal") "NoNameField" -}}
 {{- $retFieldNamesFlatten := strings -}}
+{{- $retStructFieldNames := strings -}}
+{{- $retStructFieldTypes := strings -}}
 {{- $hasInBinding := gt (len .Annot.InBindings) 0 -}}
 {{- $returnStyle := .Annot.ReturnStyle -}}
 
@@ -41,7 +43,9 @@ type {{ $retName }} struct {
 	{{- if $wildcardTableIsNormal }}
 		{{- if eq $wildcardOffset 0 }}
 			{{- $retFieldNames.Add $wildcardTableRefName }}
-			{{ $retFieldNames.Last }} {{ $rf.Table.PascalName }} // {{ $wildcardTableRefName }}.*
+			{{- $retStructFieldNames.Add $retFieldNames.Last }}
+			{{- $retStructFieldTypes.Add $rf.Table.PascalName }}
+			{{ $retStructFieldNames.Last }} *{{ $retStructFieldTypes.Last }} // {{ $wildcardTableRefName }}.*
 		{{- end }}
 		{{- $retFieldNamesFlatten.Add (printf "%s.%s" $retFieldNames.Last $rf.Column.PascalName) }}
 	{{- else }}
@@ -55,6 +59,14 @@ type {{ $retName }} struct {
 	{{- end }}
 
 {{- end }}
+}
+
+func new{{ $retName }}() *{{ $retName }} {
+	return &{{ $retName }}{
+{{ range $i, $name := $retStructFieldNames -}}
+		{{ $name }}: new({{ index $retStructFieldTypes $i }}),
+{{ end -}}
+	}
 }
 
 {{/* =========================== */}}
@@ -117,7 +129,7 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 	}
 
 	// - Scan.
-	ret_ := new({{ $retName }})
+	ret_ := new{{ $retName }}()
 	if err_ := row_.Scan({{ range $i, $field := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $field }}{{ end }}); err != nil {
 		return nil, err
 	}
@@ -134,7 +146,7 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 	// - Scan.
 	ret_ := make([]*{{ $retName }}, 0)
 	for rows_.Rows.Next() {
-		r_ := new({{ $retName }})
+		r_ := new{{ $retName }}()
 		if err_ := rows_.Rows.Scan({{ range $i, $field := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $field }}{{ end }}); err != nil {
 			return nil, err_
 		}
