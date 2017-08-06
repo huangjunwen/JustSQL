@@ -39,23 +39,24 @@ func handleSelectStmt(r *Renderer, obj interface{}) (interface{}, error) {
 		return nil, err
 	}
 
-	fnMeta, err := annot.NewWrapperFuncMeta(stmtMeta.SelectStmt.Text())
+	annotMeta, err := annot.NewAnnotMeta(stmtMeta.SelectStmt.Text())
 	if err != nil {
 		return nil, err
 	}
-	switch fnMeta.ReturnStyle {
+	switch annotMeta.ReturnStyle {
 	case annot.ReturnMany, annot.ReturnOne:
 	case annot.ReturnUnknown:
 		// Default return many for select.
-		fnMeta.ReturnStyle = annot.ReturnMany
+		annotMeta.ReturnStyle = annot.ReturnMany
 	default:
-		return nil, fmt.Errorf("Wrapper function's return can't be %+q for SELECT ", fnMeta.ReturnStyle)
+		return nil, fmt.Errorf("Wrapper function's return can't be %+q for SELECT ",
+			annotMeta.ReturnStyle)
 	}
 
 	return map[string]interface{}{
 		"OriginStmt": originStmtMeta,
 		"Stmt":       stmtMeta,
-		"Func":       fnMeta,
+		"Annot":      annotMeta,
 	}, nil
 
 }
@@ -74,14 +75,14 @@ func handleInsertStmt(r *Renderer, obj interface{}) (interface{}, error) {
 		return nil, err
 	}
 
-	fnMeta, err := annot.NewWrapperFuncMeta(stmt.Text())
+	annotMeta, err := annot.NewAnnotMeta(stmt.Text())
 	if err != nil {
 		return nil, err
 	}
 
 	return map[string]interface{}{
-		"Stmt": stmtMeta,
-		"Func": fnMeta,
+		"Stmt":  stmtMeta,
+		"Annot": annotMeta,
 	}, nil
 
 }
@@ -100,14 +101,14 @@ func handleDeleteStmt(r *Renderer, obj interface{}) (interface{}, error) {
 		return nil, err
 	}
 
-	fnMeta, err := annot.NewWrapperFuncMeta(stmt.Text())
+	annotMeta, err := annot.NewAnnotMeta(stmt.Text())
 	if err != nil {
 		return nil, err
 	}
 
 	return map[string]interface{}{
-		"Stmt": stmtMeta,
-		"Func": fnMeta,
+		"Stmt":  stmtMeta,
+		"Annot": annotMeta,
 	}, nil
 
 }
@@ -126,14 +127,14 @@ func handleUpdateStmt(r *Renderer, obj interface{}) (interface{}, error) {
 		return nil, err
 	}
 
-	fnMeta, err := annot.NewWrapperFuncMeta(stmt.Text())
+	annotMeta, err := annot.NewAnnotMeta(stmt.Text())
 	if err != nil {
 		return nil, err
 	}
 
 	return map[string]interface{}{
-		"Stmt": stmtMeta,
-		"Func": fnMeta,
+		"Stmt":  stmtMeta,
+		"Annot": annotMeta,
 	}, nil
 
 }

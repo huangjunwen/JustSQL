@@ -101,34 +101,6 @@ func (a *ArgAnnot) Set(key, val string) error {
 	return nil
 }
 
-// Declare a bind option. Defualt to ':'.
-type BindOptAnnot struct {
-	// Prefix of named placeholder in query string.
-	NamePrefix string
-}
-
-func (a *BindOptAnnot) SetPrimary(val string) error {
-	if val != "" {
-		return fmt.Errorf("bindOpt: expect no primary value but got %+q", val)
-	}
-	return nil
-}
-
-func (a *BindOptAnnot) Set(key, val string) error {
-	switch key {
-	default:
-		return fmt.Errorf("bindOpt: unknown option %+q", key)
-	case "namePrefix":
-		if val == "" {
-			return fmt.Errorf("bindOpt: got empty setting for namePrefix")
-		}
-		a.NamePrefix = val
-	case "":
-		return nil
-	}
-	return nil
-}
-
 // Declare a binding.
 type BindAnnot struct {
 	// Bind arg name.
@@ -155,6 +127,34 @@ func (a *BindAnnot) Set(key, val string) error {
 		return fmt.Errorf("bind: unknown option %+q", key)
 	case "in":
 		a.In = true
+	case "":
+		return nil
+	}
+	return nil
+}
+
+// Declare a bind option. Defualt to ':'.
+type BindOptAnnot struct {
+	// Prefix of named placeholder in query string.
+	NamePrefix string
+}
+
+func (a *BindOptAnnot) SetPrimary(val string) error {
+	if val != "" {
+		return fmt.Errorf("bindOpt: expect no primary value but got %+q", val)
+	}
+	return nil
+}
+
+func (a *BindOptAnnot) Set(key, val string) error {
+	switch key {
+	default:
+		return fmt.Errorf("bindOpt: unknown option %+q", key)
+	case "namePrefix":
+		if val == "" {
+			return fmt.Errorf("bindOpt: got empty setting for namePrefix")
+		}
+		a.NamePrefix = val
 	case "":
 		return nil
 	}

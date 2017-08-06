@@ -18,13 +18,13 @@ func init() {
 {{/* =========================== */}}
 {{/*          declares           */}}
 {{/* =========================== */}}
-{{- $funcName := .Func.Name -}}
+{{- $funcName := .Annot.FuncName -}}
 {{- $rfs := .Stmt.ResultFields -}}
-{{- $retName := printf "%sResult" .Func.Name -}}
+{{- $retName := printf "%sResult" .Annot.FuncName -}}
 {{- $retFieldNames := uniqueStrings (fn "pascal") "NoNameField" -}}
 {{- $retFieldNamesFlatten := strings -}}
-{{- $hasInBinding := .Func.HasInBinding -}}
-{{- $returnStyle := .Func.ReturnStyle -}}
+{{- $hasInBinding := gt (len .Annot.InBindings) 0 -}}
+{{- $returnStyle := .Annot.ReturnStyle -}}
 
 {{/* =========================== */}}
 {{/*          return type        */}}
@@ -62,7 +62,7 @@ type {{ $retName }} struct {
 {{/* =========================== */}}
 
 var _{{ $funcName }}SQLTmpl = template.Must(template.New({{ printf "%q" $funcName }}).Parse("" +
-{{- range $line := splitLines .Func.Query }}
+{{- range $line := splitLines .Annot.Text }}
 	"{{ printf "%s" $line }} " +
 {{- end }}""))
 
@@ -77,11 +77,11 @@ var _{{ $funcName }}SQLTmpl = template.Must(template.New({{ printf "%q" $funcNam
 {{- end }}
 {{- end }}
 //
-func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Func.Args }}, {{ $arg.Name }} {{ typeName $arg.Type }} {{ end }}) ({{ if eq $returnStyle "one" }}*{{ $retName }}{{ else if eq $returnStyle "many" }}[]*{{ $retName }}{{ end }}, error) {
+func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Args }}, {{ $arg.Name }} {{ typeName $arg.Type }} {{ end }}) ({{ if eq $returnStyle "one" }}*{{ $retName }}{{ else if eq $returnStyle "many" }}[]*{{ $retName }}{{ end }}, error) {
 
 	// - Dot object for template and query parameter.
 	dot_ := map[string]interface{}{
-{{- range $arg := .Func.Args }}
+{{- range $arg := .Annot.Args }}
 		{{ printf "%q" $arg.Name }}: {{ $arg.Name }},
 {{- end }}
 	}
