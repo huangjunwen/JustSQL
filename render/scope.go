@@ -86,9 +86,12 @@ func (scope *Scope) ListPkg() [][]string {
 
 	ret := make([][]string, 0, len(scope.pkgPaths))
 	for pkgPath, pkgName := range scope.pkgPaths {
-		// If pkg is not used, change it to "_"
 		if !scope.pkgNames[pkgName] {
+			// If pkg is not used, change it to "_".
 			pkgName = "_"
+		} else if path.Base(pkgPath) == pkgName {
+			// Pkg used and can be omitted.
+			pkgName = ""
 		}
 		ret = append(ret, []string{
 			pkgPath,

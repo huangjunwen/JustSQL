@@ -11,7 +11,7 @@ func init() {
 {{/* =========================== */}}
 {{- $ctx := imp "context" -}}
 {{- $fmt := imp "fmt" -}}
-{{- $sqlx := imp "database/sqlx" -}}
+{{- $sqlx := imp "github.com/jmoiron/sqlx" -}}
 {{- $driver := imp "database/sql/driver" -}}
 {{- $strings := imp "strings" -}}
 
