@@ -33,10 +33,10 @@ func init() {
 	{{/* $wildcardTableRefName != "" if the result field is inside a wildcard */}}
 	{{- $wildcardTableRefName := $.OriginStmt.FieldList.WildcardTableRefName $i -}}
 	{{- $wildcardTableIsNormal := and ($.OriginStmt.TableRefs.IsNormalTable $wildcardTableRefName) (not ($.OriginStmt.TableRefs.IsDerivedTable $wildcardTableRefName)) -}}
-	{{/* BUG: the table should be in default database */}}
 	{{- $wildcardOffset := $.OriginStmt.FieldList.WildcardOffset $i -}}
+	{{- $inCurrDB := eq $rf.DBName (dbname) -}}
 
-	{{- if and $wildcardTableIsNormal (eq $rf.DBName (dbname)) -}}
+	{{- if and $wildcardTableIsNormal $inCurrDB -}}
 		{{- if eq $wildcardOffset 0 -}}
 			{{- append $retFieldNameList $wildcardTableRefName -}}
 			{{- append $retFieldTypeList (printf "*%s" $rf.Table.PascalName) -}}
@@ -46,7 +46,7 @@ func init() {
 		{{- append $retFieldNameFlattenList (printf "%s.%s" (last $retFieldNameList) $rf.Column.PascalName) }}
 	{{- else -}}
 		{{- append $retFieldNameList $rf.Name -}}
-		{{- if and (or $rf.IsEnum $rf.IsSet) (notNil $rf.Table) }}
+		{{- if and (or $rf.IsEnum $rf.IsSet) (notNil $rf.Table) $inCurrDB }}
 			{{- append $retFieldTypeList (printf "%s%s" $rf.Table.PascalName $rf.Column.PascalName) -}}
 		{{- else }}
 			{{- append $retFieldTypeList (typeName $rf.Type) -}}
