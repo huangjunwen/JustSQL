@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"unicode"
@@ -39,4 +40,18 @@ func CamelCase(s string) string {
 	b := []byte(PascalCase(s))
 	b[0] = byte(unicode.ToLower(rune(b[0])))
 	return string(b)
+}
+
+// Recover and capture the error.
+func RecoverErr(err *error) bool {
+	r := recover()
+	if r == nil {
+		return false
+	}
+	e, ok := r.(error)
+	if !ok {
+		e = fmt.Errorf("recover(%v)", r)
+	}
+	*err = e
+	return true
 }

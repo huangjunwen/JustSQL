@@ -10,15 +10,34 @@ import (
 	"text/template"
 )
 
+// --- Interfaces ---
+
+// Indexer represents a random accessable array.
+type Indexer interface {
+	Len() int
+	// Panic if out of range
+	Index(i int) interface{}
+}
+
+// Appendable represents a mutable list of items.
+type Appendable interface {
+	Append(items ...interface{}) error
+}
+
+// StringsContainer represents a list of strings.
+type StringsContainer interface {
+	Strings() []string
+}
+
 // --- General helpers ---
 
 // Return false only when v is nil.
 func notNil(v interface{}) (res bool) {
 	defer func() {
-		if r := recover(); r != nil {
+		var err error
+		if utils.RecoverErr(&err) {
 			res = false
 		}
-		return
 	}()
 	res = !reflect.ValueOf(v).IsNil()
 	return
@@ -34,80 +53,166 @@ func buildFn(fnMap template.FuncMap) func(string) interface{} {
 	}
 }
 
+func first(val interface{}) (ret interface{}, err error) {
+	defer func() {
+		if utils.RecoverErr(&err) {
+			ret = ""
+		}
+	}()
+	switch v := val.(type) {
+	case Indexer:
+		ret = v.Index(0)
+	default:
+		ret = reflect.ValueOf(val).Index(0).Interface()
+	}
+	return
+}
+
+func last(val interface{}) (ret interface{}, err error) {
+	defer func() {
+		if utils.RecoverErr(&err) {
+			ret = ""
+		}
+	}()
+	switch v := val.(type) {
+	case Indexer:
+		ret = v.Index(v.Len() - 1)
+	default:
+		reflectVal := reflect.ValueOf(val)
+		ret = reflectVal.Index(reflectVal.Len() - 1).Interface()
+	}
+	return
+}
+
+func append_(val interface{}, items ...interface{}) (ret string, err error) {
+	defer func() {
+		utils.RecoverErr(&err)
+	}()
+	switch v := val.(type) {
+	case Appendable:
+		err = v.Append(items...)
+	default:
+		itemValues := make([]reflect.Value, 0, len(items))
+		for _, item := range items {
+			itemValues = append(itemValues, reflect.ValueOf(item))
+		}
+		reflect.Append(reflect.ValueOf(val), itemValues...)
+	}
+	return
+}
+
 // --- String helpers ---
 
-// A list of strings.
-type Strings []string
-
-func (ss *Strings) Add(s string) string {
-	*ss = append(*ss, s)
-	return ""
+// StringList is just a list of strings.
+type StringList struct {
+	ss []string
 }
 
-func (ss *Strings) Last() string {
-	l := len(*ss)
-	if l == 0 {
-		return ""
+func NewStringList() *StringList {
+	return &StringList{
+		ss: []string{},
 	}
-	return (*ss)[l-1]
 }
 
-func NewStrings() *Strings {
-	return &Strings{}
+func (sl *StringList) Append(items ...interface{}) error {
+	for _, item := range items {
+		if s, ok := item.(string); !ok {
+			return fmt.Errorf("plainStrings.Append: expect string but got %T", item)
+		} else {
+			sl.ss = append(sl.ss, s)
+		}
+	}
+	return nil
 }
 
-func splitLines(s string) Strings {
-	return strings.Split(s, "\n")
+func (sl *StringList) Strings() []string {
+	return sl.ss
 }
 
-// A set of unique strings.
-type UniqueStrings struct {
-	*Strings
-	StringsMap map[string]int
-	Converter  func(string) string
-	Default    string
+func (sl *StringList) Len() int {
+	return len(sl.ss)
 }
 
-func NewUniqueStrings(converter func(string) string, dft string) *UniqueStrings {
+func (sl *StringList) Index(i int) interface{} {
+	return sl.ss[i]
+}
+
+// UniqueStringList is a list of unique strings.
+type UniqueStringList struct {
+	ss        []string
+	smap      map[string]int
+	converter func(string) string
+	default_  string
+}
+
+func NewUniqueStringList(converter func(string) string, default_ string) *UniqueStringList {
 	if converter == nil {
 		converter = func(s string) string {
 			return s
 		}
 	}
-	return &UniqueStrings{
-		Strings:    &Strings{},
-		StringsMap: map[string]int{},
-		Converter:  converter,
-		Default:    dft,
+	return &UniqueStringList{
+		ss:        []string{},
+		smap:      map[string]int{},
+		converter: converter,
+		default_:  default_,
 	}
 }
 
-func (uss *UniqueStrings) Add(s string) string {
-	s = uss.Converter(s)
-	if s == "" {
-		s = uss.Default
-	}
-	result := s
-	for i := 1; ; i++ {
-		if _, ok := uss.StringsMap[result]; !ok {
-			uss.StringsMap[result] = len(*uss.Strings)
-			uss.Strings.Add(result)
-			return ""
+func (usl *UniqueStringList) Append(items ...interface{}) error {
+	for _, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			return fmt.Errorf("uniqueStrings.Append: expect string but got %T", item)
 		}
-		result = fmt.Sprintf("%s%d", s, i)
+
+		s = usl.converter(s)
+		if s == "" {
+			s = usl.default_
+		}
+		r := s
+		for i := 1; ; i++ {
+			if _, ok := usl.smap[r]; !ok {
+				usl.smap[r] = len(usl.ss)
+				usl.ss = append(usl.ss, r)
+				break
+			}
+			r = fmt.Sprintf("%s%d", s, i)
+		}
 	}
+
+	return nil
 }
 
-func (uss *UniqueStrings) Last() string {
-	return uss.Strings.Last()
+func (usl *UniqueStringList) Strings() []string {
+	return usl.ss
 }
 
-func repeatJoin(n int, s string, sep string) string {
-	parts := make([]string, n)
-	for i := 0; i < len(parts); i++ {
-		parts[i] = s
+func (usl *UniqueStringList) Len() int {
+	return len(usl.ss)
+}
+
+func (usl *UniqueStringList) Index(i int) interface{} {
+	return usl.ss[i]
+}
+
+func dup(s string, n int) []string {
+	r := make([]string, n)
+	for i := 0; i < len(r); i++ {
+		r[i] = s
 	}
-	return strings.Join(parts, sep)
+	return r
+}
+
+func join(val interface{}, sep string) (string, error) {
+	switch v := val.(type) {
+	case []string:
+		return strings.Join(v, sep), nil
+	case StringsContainer:
+		return strings.Join(v.Strings(), sep), nil
+	default:
+		return "", fmt.Errorf("join: expect []string or StringsContainer but got %T", v)
+	}
 }
 
 // --- Source code helpers ---
@@ -134,13 +239,13 @@ func buildTypeName(r *Renderer) func(interface{}) (*TypeName, error) {
 
 // --- Database helpers ---
 
-// Return 'col1, col2, col3, ...'
-func columnNameList(cols []*context.ColumnMeta) string {
-	parts := make([]string, 0, len(cols))
+// Return names of columns.
+func columnNames(cols []*context.ColumnMeta) []string {
+	r := make([]string, 0, len(cols))
 	for _, col := range cols {
-		parts = append(parts, col.Name)
+		r = append(r, col.Name)
 	}
-	return strings.Join(parts, ", ")
+	return r
 }
 
 func BuildExtraFuncs(r *Renderer) template.FuncMap {
@@ -148,18 +253,22 @@ func BuildExtraFuncs(r *Renderer) template.FuncMap {
 	fnMap := template.FuncMap{
 		// General helpers.
 		"notNil": notNil,
+		"first":  first,
+		"last":   last,
+		"append": append_,
 		// String helpers.
-		"pascal":        utils.PascalCase,
-		"camel":         utils.CamelCase,
-		"strings":       NewStrings,
-		"splitLines":    splitLines,
-		"uniqueStrings": NewUniqueStrings,
-		"repeatJoin":    repeatJoin,
+		"pascal":           utils.PascalCase,
+		"camel":            utils.CamelCase,
+		"stringList":       NewStringList,
+		"uniqueStringList": NewUniqueStringList,
+		"split":            strings.Split,
+		"dup":              dup,
+		"join":             join,
 		// Source code helpers.
 		"imp":      buildImp(r),
 		"typeName": buildTypeName(r),
 		// Database helpers.
-		"columnNameList": columnNameList,
+		"columnNames": columnNames,
 	}
 
 	// Can be used to getting a function as variable.

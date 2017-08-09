@@ -21,10 +21,10 @@ func init() {
 {{- $funcName := .Annot.FuncName -}}
 {{- $rfs := .Stmt.ResultFields -}}
 {{- $retName := printf "%sResult" .Annot.FuncName -}}
-{{- $retFieldNames := uniqueStrings (fn "pascal") "NoNameField" -}}
-{{- $retFieldNamesFlatten := strings -}}
-{{- $retStructFieldNames := strings -}}
-{{- $retStructFieldTypes := strings -}}
+{{- $retFieldNames := uniqueStringList (fn "pascal") "NoNameField" -}}
+{{- $retFieldNamesFlatten := stringList -}}
+{{- $retStructFieldNames := stringList -}}
+{{- $retStructFieldTypes := stringList -}}
 {{- $hasInBinding := gt (len .Annot.InBindings) 0 -}}
 {{- $returnStyle := .Annot.ReturnStyle -}}
 
@@ -42,20 +42,20 @@ type {{ $retName }} struct {
 
 	{{- if $wildcardTableIsNormal }}
 		{{- if eq $wildcardOffset 0 }}
-			{{- $retFieldNames.Add $wildcardTableRefName }}
-			{{- $retStructFieldNames.Add $retFieldNames.Last }}
-			{{- $retStructFieldTypes.Add $rf.Table.PascalName }}
-			{{ $retStructFieldNames.Last }} *{{ $retStructFieldTypes.Last }} // {{ $wildcardTableRefName }}.*
+			{{- append $retFieldNames $wildcardTableRefName }}
+			{{- append $retStructFieldNames (last $retFieldNames) }}
+			{{- append $retStructFieldTypes $rf.Table.PascalName }}
+			{{ last $retStructFieldNames }} *{{ last $retStructFieldTypes }} // {{ $wildcardTableRefName }}.*
 		{{- end }}
-		{{- $retFieldNamesFlatten.Add (printf "%s.%s" $retFieldNames.Last $rf.Column.PascalName) }}
+		{{- append $retFieldNamesFlatten (printf "%s.%s" (last $retFieldNames) $rf.Column.PascalName) }}
 	{{- else }}
-		{{- $retFieldNames.Add $rf.Name -}}
+		{{- append $retFieldNames $rf.Name -}}
 		{{- if and (or $rf.IsEnum $rf.IsSet) (notNil $rf.Table) }}
-			{{ $retFieldNames.Last }} {{ $rf.Table.PascalName }}{{ $rf.Column.PascalName }}
+			{{ last $retFieldNames }} {{ $rf.Table.PascalName }}{{ $rf.Column.PascalName }}
 		{{- else }}
-			{{ $retFieldNames.Last }} {{ typeName $rf.Type }}
+			{{ last $retFieldNames }} {{ typeName $rf.Type }}
 		{{- end }}
-		{{- $retFieldNamesFlatten.Add $retFieldNames.Last }}
+		{{- append $retFieldNamesFlatten (last $retFieldNames) }}
 	{{- end }}
 
 {{- end }}
@@ -63,8 +63,8 @@ type {{ $retName }} struct {
 
 func new{{ $retName }}() *{{ $retName }} {
 	return &{{ $retName }}{
-{{ range $i, $name := $retStructFieldNames -}}
-		{{ $name }}: new({{ index $retStructFieldTypes $i }}),
+{{ range $i, $name := $retStructFieldNames.Strings -}}
+		{{ $name }}: new({{ $retStructFieldTypes.Index $i }}),
 {{ end -}}
 	}
 }
@@ -74,7 +74,7 @@ func new{{ $retName }}() *{{ $retName }} {
 {{/* =========================== */}}
 
 var _{{ $funcName }}SQLTmpl = template.Must(template.New({{ printf "%q" $funcName }}).Parse("" +
-{{- range $line := splitLines .Annot.Text }}
+{{- range $line := split .Annot.Text "\n" }}
 	"{{ printf "%s" $line }} " +
 {{- end }}""))
 
@@ -83,7 +83,7 @@ var _{{ $funcName }}SQLTmpl = template.Must(template.New({{ printf "%q" $funcNam
 {{/* =========================== */}}
 // {{ $funcName }} is generated from:
 //
-{{- range $line := splitLines .OriginStmt.SelectStmt.Text }}
+{{- range $line := split .OriginStmt.SelectStmt.Text "\n" }}
 {{- if ne (len $line) 0 }}
 //    {{ printf "%s" $line }}
 {{- end }}
@@ -130,7 +130,7 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 
 	// - Scan.
 	ret_ := new{{ $retName }}()
-	if err_ := row_.Scan({{ range $i, $field := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $field }}{{ end }}); err != nil {
+	if err_ := row_.Scan({{ range $i, $field := $retFieldNamesFlatten.Strings }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $field }}{{ end }}); err != nil {
 		return nil, err
 	}
 
@@ -147,7 +147,7 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 	ret_ := make([]*{{ $retName }}, 0)
 	for rows_.Rows.Next() {
 		r_ := new{{ $retName }}()
-		if err_ := rows_.Rows.Scan({{ range $i, $field := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $field }}{{ end }}); err != nil {
+		if err_ := rows_.Rows.Scan({{ range $i, $field := $retFieldNamesFlatten.Strings }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $field }}{{ end }}); err != nil {
 			return nil, err_
 		}
 		ret_ = append(ret_, r_)
