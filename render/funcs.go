@@ -117,7 +117,7 @@ func NewStringList() *StringList {
 func (sl *StringList) Append(items ...interface{}) error {
 	for _, item := range items {
 		if s, ok := item.(string); !ok {
-			return fmt.Errorf("plainStrings.Append: expect string but got %T", item)
+			return fmt.Errorf("stringList.Append: expect string but got %T", item)
 		} else {
 			sl.ss = append(sl.ss, s)
 		}
@@ -163,7 +163,7 @@ func (usl *UniqueStringList) Append(items ...interface{}) error {
 	for _, item := range items {
 		s, ok := item.(string)
 		if !ok {
-			return fmt.Errorf("uniqueStrings.Append: expect string but got %T", item)
+			return fmt.Errorf("uniqueStringList.Append: expect string but got %T", item)
 		}
 
 		s = usl.converter(s)
@@ -271,7 +271,7 @@ func BuildExtraFuncs(r *Renderer) template.FuncMap {
 		"columnNames": columnNames,
 	}
 
-	// Can be used to getting a function as variable.
+	// Can be used for getting a function as variable.
 	fnMap["fn"] = buildFn(fnMap)
 	return fnMap
 
