@@ -21,23 +21,26 @@ type ResultFieldMeta struct {
 
 	// If this is a field from table column.
 	// The following will have values.
+	DB     *DBMeta
 	Table  *TableMeta
 	Column *ColumnMeta
 }
 
 func NewResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, error) {
 
-	var table *TableMeta = nil
-	var column *ColumnMeta = nil
+	var dbMeta *DBMeta = nil
+	var tableMeta *TableMeta = nil
+	var columnMeta *ColumnMeta = nil
+	var err error
 
 	// Real TableInfo has name.
 	if rf.Table.Name.L != "" {
-		dbMeta, err := ctx.GetDBMeta(rf.DBName.L)
+		dbMeta, err = ctx.GetDBMeta(rf.DBName.L)
 		if err != nil {
 			return nil, err
 		}
-		table = dbMeta.Tables[rf.Table.Name.L]
-		column = table.Columns[rf.Column.Offset]
+		tableMeta = dbMeta.Tables[rf.Table.Name.L]
+		columnMeta = tableMeta.Columns[rf.Column.Offset]
 	}
 
 	// Determin the name.
@@ -50,8 +53,9 @@ func NewResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, er
 		ResultField: rf,
 		Name:        name,
 		Type:        &rf.Column.FieldType,
-		Table:       table,
-		Column:      column,
+		DB:          dbMeta,
+		Table:       tableMeta,
+		Column:      columnMeta,
 	}, nil
 
 }
@@ -62,6 +66,30 @@ func (rf *ResultFieldMeta) IsEnum() bool {
 
 func (rf *ResultFieldMeta) IsSet() bool {
 	return rf.Type.Tp == mysql.TypeSet
+}
+
+// Return database name if this is a field from normal table.
+func (rf *ResultFieldMeta) DBName() string {
+	if rf.DB == nil {
+		return ""
+	}
+	return rf.DB.Name
+}
+
+// Return table name if this is a field from normal table.
+func (rf *ResultFieldMeta) TableName() string {
+	if rf.Table == nil {
+		return ""
+	}
+	return rf.Table.Name
+}
+
+// Return column name if this is a field from normal table.
+func (rf *ResultFieldMeta) ColumnName() string {
+	if rf.Column == nil {
+		return ""
+	}
+	return rf.Column.Name
 }
 
 // TableRefsMeta contains meta information of table references (e.g. 'FROM' part of SELECT statement).

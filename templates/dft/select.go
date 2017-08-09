@@ -16,55 +16,65 @@ func init() {
 {{- $bytes := imp "bytes" -}}
 
 {{/* =========================== */}}
-{{/*          declares           */}}
+{{/*          variables          */}}
 {{/* =========================== */}}
 {{- $funcName := .Annot.FuncName -}}
 {{- $rfs := .Stmt.ResultFields -}}
 {{- $retName := printf "%sResult" .Annot.FuncName -}}
-{{- $retFieldNames := uniqueStringList (fn "pascal") "NoNameField" -}}
-{{- $retFieldNamesFlatten := stringList -}}
-{{- $retStructFieldNames := stringList -}}
-{{- $retStructFieldTypes := stringList -}}
 {{- $hasInBinding := gt (len .Annot.InBindings) 0 -}}
 {{- $returnStyle := .Annot.ReturnStyle -}}
+
+{{- $retFieldNameList := uniqueStringList (fn "pascal") "NoNameField" -}}
+{{- $retFieldTypeList := stringList -}}
+{{- $retStructFieldNameList := stringList -}}
+{{- $retStructFieldTypeList := stringList -}}
+{{- $retFieldNameFlattenList := stringList -}}
+{{- range $i, $rf := $rfs -}}
+	{{/* $wildcardTableRefName != "" if the result field is inside a wildcard */}}
+	{{- $wildcardTableRefName := $.OriginStmt.FieldList.WildcardTableRefName $i -}}
+	{{- $wildcardTableIsNormal := and ($.OriginStmt.TableRefs.IsNormalTable $wildcardTableRefName) (not ($.OriginStmt.TableRefs.IsDerivedTable $wildcardTableRefName)) -}}
+	{{/* BUG: the table should be in default database */}}
+	{{- $wildcardOffset := $.OriginStmt.FieldList.WildcardOffset $i -}}
+
+	{{- if and $wildcardTableIsNormal (eq $rf.DBName (dbname)) -}}
+		{{- if eq $wildcardOffset 0 -}}
+			{{- append $retFieldNameList $wildcardTableRefName -}}
+			{{- append $retFieldTypeList (printf "*%s" $rf.Table.PascalName) -}}
+			{{- append $retStructFieldNameList (last $retFieldNameList) -}}
+			{{- append $retStructFieldTypeList $rf.Table.PascalName -}}
+		{{- end -}}
+		{{- append $retFieldNameFlattenList (printf "%s.%s" (last $retFieldNameList) $rf.Column.PascalName) }}
+	{{- else -}}
+		{{- append $retFieldNameList $rf.Name -}}
+		{{- if and (or $rf.IsEnum $rf.IsSet) (notNil $rf.Table) }}
+			{{- append $retFieldTypeList (printf "%s%s" $rf.Table.PascalName $rf.Column.PascalName) -}}
+		{{- else }}
+			{{- append $retFieldTypeList (typeName $rf.Type) -}}
+		{{- end }}
+		{{- append $retFieldNameFlattenList (last $retFieldNameList) }}
+	{{- end -}}
+{{- end -}}
+{{- $retFieldNames := $retFieldNameList.Strings -}}
+{{- $retFieldTypes := $retFieldTypeList.Strings -}}
+{{- $retStructFieldNames := $retStructFieldNameList.Strings -}}
+{{- $retStructFieldTypes := $retStructFieldTypeList.Strings -}}
+{{- $retFieldNamesFlatten := $retFieldNameFlattenList.Strings -}}
 
 {{/* =========================== */}}
 {{/*          return type        */}}
 {{/* =========================== */}}
 
-// {{ $retName }} is the result type of {{ $funcName }}.
+// {{ $retName }} is the return type of {{ $funcName }}.
 type {{ $retName }} struct {
-{{- range $i, $rf := $rfs -}}
-	{{/* whether this result field is in a normal table wildcard expansion */}}
-	{{- $wildcardTableRefName := $.OriginStmt.FieldList.WildcardTableRefName $i -}}
-	{{- $wildcardTableIsNormal := and ($.OriginStmt.TableRefs.IsNormalTable $wildcardTableRefName) (not ($.OriginStmt.TableRefs.IsDerivedTable $wildcardTableRefName)) -}}
-	{{- $wildcardOffset := $.OriginStmt.FieldList.WildcardOffset $i -}}
-
-	{{- if $wildcardTableIsNormal }}
-		{{- if eq $wildcardOffset 0 }}
-			{{- append $retFieldNames $wildcardTableRefName }}
-			{{- append $retStructFieldNames (last $retFieldNames) }}
-			{{- append $retStructFieldTypes $rf.Table.PascalName }}
-			{{ last $retStructFieldNames }} *{{ last $retStructFieldTypes }} // {{ $wildcardTableRefName }}.*
-		{{- end }}
-		{{- append $retFieldNamesFlatten (printf "%s.%s" (last $retFieldNames) $rf.Column.PascalName) }}
-	{{- else }}
-		{{- append $retFieldNames $rf.Name -}}
-		{{- if and (or $rf.IsEnum $rf.IsSet) (notNil $rf.Table) }}
-			{{ last $retFieldNames }} {{ $rf.Table.PascalName }}{{ $rf.Column.PascalName }}
-		{{- else }}
-			{{ last $retFieldNames }} {{ typeName $rf.Type }}
-		{{- end }}
-		{{- append $retFieldNamesFlatten (last $retFieldNames) }}
-	{{- end }}
-
+{{- range $i, $name := $retFieldNames }}
+	{{ $name }} {{ index $retFieldTypes $i }}
 {{- end }}
 }
 
 func new{{ $retName }}() *{{ $retName }} {
 	return &{{ $retName }}{
-{{ range $i, $name := $retStructFieldNames.Strings -}}
-		{{ $name }}: new({{ $retStructFieldTypes.Index $i }}),
+{{ range $i, $name := $retStructFieldNames -}}
+		{{ $name }}: new({{ index $retStructFieldTypes $i }}),
 {{ end -}}
 	}
 }
@@ -130,7 +140,7 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 
 	// - Scan.
 	ret_ := new{{ $retName }}()
-	if err_ := row_.Scan({{ range $i, $field := $retFieldNamesFlatten.Strings }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $field }}{{ end }}); err != nil {
+	if err_ := row_.Scan({{ range $i, $name := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $name }}{{ end }}); err != nil {
 		return nil, err
 	}
 
@@ -147,7 +157,7 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 	ret_ := make([]*{{ $retName }}, 0)
 	for rows_.Rows.Next() {
 		r_ := new{{ $retName }}()
-		if err_ := rows_.Rows.Scan({{ range $i, $field := $retFieldNamesFlatten.Strings }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $field }}{{ end }}); err != nil {
+		if err_ := rows_.Rows.Scan({{ range $i, $name := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $name }}{{ end }}); err != nil {
 			return nil, err_
 		}
 		ret_ = append(ret_, r_)

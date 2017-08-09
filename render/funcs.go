@@ -116,10 +116,13 @@ func NewStringList() *StringList {
 
 func (sl *StringList) Append(items ...interface{}) error {
 	for _, item := range items {
-		if s, ok := item.(string); !ok {
+		switch it := item.(type) {
+		case string:
+			sl.ss = append(sl.ss, it)
+		case fmt.Stringer:
+			sl.ss = append(sl.ss, it.String())
+		default:
 			return fmt.Errorf("stringList.Append: expect string but got %T", item)
-		} else {
-			sl.ss = append(sl.ss, s)
 		}
 	}
 	return nil
@@ -161,8 +164,14 @@ func NewUniqueStringList(converter func(string) string, default_ string) *Unique
 
 func (usl *UniqueStringList) Append(items ...interface{}) error {
 	for _, item := range items {
-		s, ok := item.(string)
-		if !ok {
+
+		var s string
+		switch it := item.(type) {
+		case string:
+			s = it
+		case fmt.Stringer:
+			s = it.String()
+		default:
 			return fmt.Errorf("uniqueStringList.Append: expect string but got %T", item)
 		}
 
@@ -239,13 +248,60 @@ func buildTypeName(r *Renderer) func(interface{}) (*TypeName, error) {
 
 // --- Database helpers ---
 
+type ColumnList struct {
+	cols []*context.ColumnMeta
+}
+
+func NewColumnList() *ColumnList {
+	return &ColumnList{
+		cols: []*context.ColumnMeta{},
+	}
+}
+
+func (cl *ColumnList) Len() int {
+	return len(cl.cols)
+}
+
+func (cl *ColumnList) Index(i int) interface{} {
+	return cl.cols[i]
+}
+
+func (cl *ColumnList) Append(items ...interface{}) error {
+	for _, item := range items {
+		if col, ok := item.(*context.ColumnMeta); !ok {
+			return fmt.Errorf("columnList.Append: expect *context.ColumnMeta but got %T", item)
+		} else {
+			cl.cols = append(cl.cols, col)
+		}
+	}
+	return nil
+}
+
+func (cl *ColumnList) Cols() []*context.ColumnMeta {
+	return cl.cols
+}
+
 // Return names of columns.
-func columnNames(cols []*context.ColumnMeta) []string {
+func columnNames(val interface{}) []string {
+	var cols []*context.ColumnMeta
+	switch v := val.(type) {
+	case []*context.ColumnMeta:
+		cols = v
+	case *ColumnList:
+		cols = v.cols
+	}
 	r := make([]string, 0, len(cols))
 	for _, col := range cols {
 		r = append(r, col.Name)
 	}
 	return r
+}
+
+func buildDBName(r *Renderer) func() string {
+	dbName := r.Context.DBName
+	return func() string {
+		return dbName
+	}
 }
 
 func BuildExtraFuncs(r *Renderer) template.FuncMap {
@@ -268,7 +324,10 @@ func BuildExtraFuncs(r *Renderer) template.FuncMap {
 		"imp":      buildImp(r),
 		"typeName": buildTypeName(r),
 		// Database helpers.
+		"columnList":  NewColumnList,
 		"columnNames": columnNames,
+		// Context helpers.
+		"dbname": buildDBName(r),
 	}
 
 	// Can be used for getting a function as variable.

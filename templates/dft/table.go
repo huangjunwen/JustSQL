@@ -16,22 +16,57 @@ func init() {
 {{- $strings := imp "strings" -}}
 
 {{/* =========================== */}}
-{{/*          declares           */}}
+{{/*      global variables       */}}
 {{/* =========================== */}}
 {{- $tableName := .Table.Name -}}
 {{- $structName := .Table.PascalName -}}
-{{- $structFieldNames := stringList -}}
 {{- $cols := .Table.Columns -}}
 {{- $autoIncCol := .Table.AutoIncColumn -}}
 {{- $primaryCols := .Table.PrimaryColumns -}}
 
-{{ range $i, $col := $cols }}
-	{{- if $col.IsEnum }}
+{{- $structFieldNameList := stringList -}}
+{{- $structFieldTypeList := stringList -}}
+{{- $enumColList := columnList -}}
+{{- $setColList := columnList -}}
+{{- range $i, $col := $cols -}}
+	{{- append $structFieldNameList $col.PascalName -}}
+	{{- if $col.IsEnum -}}
+		{{- append $structFieldTypeList (printf "%s%s" $structName $col.PascalName) -}}
+		{{- append $enumColList $col -}}
+	{{- else if $col.IsSet -}}
+		{{- append $structFieldTypeList (printf "%s%s" $structName $col.PascalName) -}}
+		{{- append $setColList $col -}}
+	{{- else -}}
+		{{- append $structFieldTypeList (typeName $col.Type) -}}
+	{{- end -}}
+{{- end -}}
+{{- $structFieldNames := $structFieldNameList.Strings -}}
+{{- $structFieldTypes := $structFieldTypeList.Strings -}}
+{{- $enumCols := $enumColList.Cols -}}
+{{- $setCols := $setColList.Cols -}}
+
+{{/* =========================== */}}
+{{/*          enums              */}}
+{{/* =========================== */}}
+
+{{ range $i, $col := $enumCols }}
 	{{/* =========================== */}}
-	{{/*          enum               */}}
+	{{/*        enum variables       */}}
 	{{/* =========================== */}}
 	{{- $enumName := printf "%s%s" $structName $col.PascalName -}}
-	{{- $enumItems := stringList -}}
+	{{- $enumItemList := stringList -}}
+	{{- range $i, $item := $col.Elems -}}
+		{{- if eq $item "" -}}
+			{{- append $enumItemList (printf "%sEmpty_" $enumName) -}}
+		{{- else -}}
+			{{- append $enumItemList (printf "%s%s" $enumName (pascal $item)) }}
+		{{- end -}}
+	{{- end -}}
+	{{- $enumItems := $enumItemList.Strings -}}
+
+	{{/* =========================== */}}
+	{{/*        enum code            */}}
+	{{/* =========================== */}}
 
 // Enum {{ $enumName }}.
 type {{ $enumName }} int
@@ -39,15 +74,10 @@ type {{ $enumName }} int
 // Enum {{ $enumName }} items.
 const (
 	// NULL value.
-	{{ $enumName }}NULL = {{ $enumName }}(0)
-	{{- range $i, $elem := $col.Elems }}
-		{{- if eq $elem "" }}
-			{{- append $enumItems (printf "%sEmpty_" $enumName) }}
-		{{- else }}
-			{{- append $enumItems (printf "%s%s" $enumName (pascal $elem)) }}
-		{{- end }}
-	// {{ printf "%+q" $elem }}
-	{{ last $enumItems }} = {{ $enumName }}({{ $i }} + 1)
+	{{ $enumName }}NULL_ = {{ $enumName }}(0)
+	{{- range $i, $item := $enumItems }}
+	// {{ printf "%+q" (index $col.Elems $i) }}
+	{{ $item }} = {{ $enumName }}({{ $i }})
 	{{- end }}
 )
 
@@ -68,14 +98,14 @@ func (e {{ $enumName }}) Valid() bool {
 // Scan implements database/sql.Scanner interface.
 func (e *{{ $enumName }}) Scan(value interface{}) error {
 	if value == nil {
-		*e = {{ $enumName }}NULL
+		*e = {{ $enumName }}NULL_
 		return nil
 	}
 
 	switch s := string(value.([]byte)); s {
-	{{- range $i, $elem := $col.Elems }}
-	case {{ printf "%+q" $elem }}:
-		*e = {{ index $enumItems $i }}
+	{{- range $i, $item := $enumItems }}
+	case {{ printf "%+q" (index $col.Elems $i) }}:
+		*e = {{ $item }}
 	{{- end }}
 	default:
 		return {{ $fmt }}.Errorf("Unexpected value for {{ $enumName }}: %+q", s)
@@ -92,12 +122,31 @@ func (e {{ $enumName }}) Value() (driver.Value, error) {
 	return e.String(), nil
 }
 
-	{{- else if $col.IsSet }}
+{{ end }}
+
+{{/* =========================== */}}
+{{/*          sets               */}}
+{{/* =========================== */}}
+
+{{ range $i, $col := $setCols -}}
+
 	{{/* =========================== */}}
-	{{/*          set                */}}
+	{{/*        set  variables       */}}
 	{{/* =========================== */}}
 	{{- $setName := printf "%s%s" $structName $col.PascalName -}}
-	{{- $setItems := stringList -}}
+	{{- $setItemList := stringList -}}
+	{{- range $i, $item := $col.Elems -}}
+		{{- if eq $item "" -}}
+			{{- append $setItemList (printf "%sEmpty_" $setName) -}}
+		{{- else -}}
+			{{- append $setItemList (printf "%s%s" $setName (pascal $item)) }}
+		{{- end -}}
+	{{- end -}}
+	{{- $setItems := $setItemList.Strings -}}
+
+	{{/* =========================== */}}
+	{{/*        set  code            */}}
+	{{/* =========================== */}}
 
 // Set {{ $setName }}.
 type {{ $setName }} struct {
@@ -107,14 +156,9 @@ type {{ $setName }} struct {
 
 // Set {{ $setName }} items.
 const (
-	{{- range $i, $elem := $col.Elems }}
-		{{- if eq $elem "" }}
-			{{- append $setItems (printf "%sEmpty_" $setName) }}
-		{{- else }}
-			{{- append $setItems (printf "%s%s" $setName (pascal $elem)) }}
-		{{- end }}
-	// {{ printf "%+q" $elem }}
-	{{ last $setItems }} = uint64(1<<{{ $i }})
+	{{- range $i, $item := $setItems }}
+	// {{ printf "%+q" (index $col.Elems $i) }}
+	{{ $item }} = uint64(1<<{{ $i }})
 	{{- end }}
 )
 
@@ -178,33 +222,27 @@ func (s {{ $setName }}) Value() (driver.Value, error) {
 	return s.String(), nil
 }
 
-	{{- end -}}
-{{ end }}
-
+{{- end }}
 
 {{/* =========================== */}}
 {{/*          main struct        */}}
 {{/* =========================== */}}
-// Table {{ $tableName }}
+
+// {{ $structName }} represents an entry of Table {{ $tableName }}.
 type {{ $structName }} struct {
-{{ range $i, $col := $cols }}
-	{{- append $structFieldNames $col.PascalName }}
-	{{- if or $col.IsEnum $col.IsSet }}
-	{{ last $structFieldNames }} {{ $structName }}{{ $col.PascalName }}
-	{{- else }}
-	{{ last $structFieldNames }} {{ typeName $col.Type }}
-	{{- end -}}
-	{{- " " -}}`+"`db:\"{{ $col.Name }}\"`"+`
-	{{- " " -}}// {{ $col.Name }}
+{{- range $i, $col := $cols }}
+	{{ index $structFieldNames $i }} {{ index $structFieldTypes $i }} `+"`db:\"{{ $col.Name }}\"`"+` // {{ $col.Name }}
 {{- end }}
 }
 
+// Insert insert an entry of {{ $tableName }} into database.
 func (entry_ *{{ $structName }}) Insert(ctx_ {{ $ctx }}.Context, db_ DBer) error {
 
-	sql_ := {{ $sqlx }}.Rebind(BindType,
-		"INSERT INTO {{ $tableName }} ({{ join (columnNames $cols) ", " }}) VALUES ({{ join (dup "?" (len $cols))  ", " }})")
+	sql_ := {{ $sqlx }}.Rebind(BindType, "INSERT INTO {{ $tableName }} " +
+		"({{ join (columnNames $cols) ", " }}) " +
+		"VALUES ({{ join (dup "?" (len $cols))  ", " }})")
 
-	{{ if notNil $autoIncCol }}res_{{ else }}_{{ end }}, err_ := db_.ExecContext(ctx_, sql_{{ range $i, $field := $structFieldNames.Strings }}, entry_.{{ $field }}{{ end }})
+	{{ if notNil $autoIncCol }}res_{{ else }}_{{ end }}, err_ := db_.ExecContext(ctx_, sql_{{ range $i, $field := $structFieldNames }}, entry_.{{ $field }}{{ end }})
 	if err_ != nil {
 		return err_
 	}
@@ -225,11 +263,12 @@ func (entry_ *{{ $structName }}) Insert(ctx_ {{ $ctx }}.Context, db_ DBer) error
 
 func (entry_ *{{ $structName }}) Select(ctx_ {{ $ctx }}.Context, db_ DBer) error {
 
-	sql_ := {{ $sqlx }}.Rebind(BindType, "SELECT {{ join (columnNames $cols) ", " }} FROM {{ $tableName }} " +
+	sql_ := {{ $sqlx }}.Rebind(BindType, "SELECT {{ join (columnNames $cols) ", " }} "+
+		"FROM {{ $tableName }} " +
 		"WHERE {{ range $i, $col := $primaryCols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}=? {{ end }}")
 
 	row_ := db_.QueryRowContext(ctx_, sql_{{ range $i, $col := $primaryCols }}, entry_.{{ $col.PascalName }}{{ end }})
-	if err_ := row_.Scan({{ range $i, $field := $structFieldNames.Strings }}{{ if ne $i 0 }}, {{ end }}&entry_.{{ $field }}{{ end }}); err_ != nil {
+	if err_ := row_.Scan({{ range $i, $field := $structFieldNames }}{{ if ne $i 0 }}, {{ end }}&entry_.{{ $field }}{{ end }}); err_ != nil {
 		return err_
 	}
 
@@ -238,9 +277,9 @@ func (entry_ *{{ $structName }}) Select(ctx_ {{ $ctx }}.Context, db_ DBer) error
 
 func (entry_ *{{ $structName }}) Update(ctx_ {{ $ctx }}.Context, db_ DBer) (int64, error) {
 
-	sql_ := {{ $sqlx }}.Rebind(BindType,
-		"UPDATE {{ $tableName }} SET {{ range $i, $col := $cols }}{{ if ne $i 0 }}, {{ end }}{{ $col.Name }}=?{{ end }}" +
-		" WHERE {{ range $i, $col := $primaryCols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}=? {{ end }}")
+	sql_ := {{ $sqlx }}.Rebind(BindType, "UPDATE {{ $tableName }} " + 
+		"SET {{ range $i, $col := $cols }}{{ if ne $i 0 }}, {{ end }}{{ $col.Name }}=?{{ end }} " +
+		"WHERE {{ range $i, $col := $primaryCols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}=? {{ end }}")
 
 	r_, err_ := db_.ExecContext(ctx_, sql_{{ range $i, $col := $cols }}, entry_.{{ $col.PascalName }}{{ end }}{{ range $i, $col := $primaryCols }}, entry_.{{ $col.PascalName }}{{ end }})
 	if err_ != nil {
@@ -253,8 +292,7 @@ func (entry_ *{{ $structName }}) Update(ctx_ {{ $ctx }}.Context, db_ DBer) (int6
 
 func (entry_ *{{ $structName }}) Delete(ctx_ {{ $ctx }}.Context, db_ DBer) (int64, error) {
 
-	sql_ := {{ $sqlx }}.Rebind(BindType,
-		"DELETE FROM {{ $tableName }} " +
+	sql_ := {{ $sqlx }}.Rebind(BindType, "DELETE FROM {{ $tableName }} " +
 		"WHERE {{ range $i, $col := $primaryCols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}=? {{ end }}")
 
 	r_, err_ := db_.ExecContext(ctx_, sql_{{ range $i, $col := $primaryCols }}, entry_.{{ $col.PascalName }}{{ end }})
