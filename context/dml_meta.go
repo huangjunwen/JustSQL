@@ -132,6 +132,10 @@ func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, 
 		TableMap:       make(map[string]int),
 	}
 
+	if refs == nil {
+		return ret, nil
+	}
+
 	var collect func(*ast.Join) error
 
 	collect = func(j *ast.Join) error {
