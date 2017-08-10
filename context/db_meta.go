@@ -63,8 +63,8 @@ type TableMeta struct {
 
 func NewTableMeta(ctx *Context, dbMeta *DBMeta, tableInfo *model.TableInfo) (*TableMeta, error) {
 	ret := &TableMeta{
-		DB:           dbMeta,
 		TableInfo:    tableInfo,
+		DB:           dbMeta,
 		Name:         tableInfo.Name.L,
 		PascalName:   utils.PascalCase(tableInfo.Name.L),
 		Columns:      make([]*ColumnMeta, 0, len(tableInfo.Columns)),
@@ -183,8 +183,8 @@ type ColumnMeta struct {
 
 func NewColumnMeta(ctx *Context, tableMeta *TableMeta, columnInfo *model.ColumnInfo) (*ColumnMeta, error) {
 	return &ColumnMeta{
-		Table:      tableMeta,
 		ColumnInfo: columnInfo,
+		Table:      tableMeta,
 		Name:       columnInfo.Name.L,
 		PascalName: utils.PascalCase(columnInfo.Name.L),
 		Offset:     columnInfo.Offset,
@@ -222,6 +222,7 @@ func (c *ColumnMeta) DefaultValue() interface{} {
 
 // IndexMeta contains meta data of an index.
 type IndexMeta struct {
+	// Nil if it is created from PKHandler.
 	*model.IndexInfo
 
 	Table *TableMeta
@@ -236,8 +237,8 @@ type IndexMeta struct {
 
 func NewIndexMeta(ctx *Context, tableMeta *TableMeta, indexInfo *model.IndexInfo) (*IndexMeta, error) {
 	ret := &IndexMeta{
-		Table:         tableMeta,
 		IndexInfo:     indexInfo,
+		Table:         tableMeta,
 		Name:          indexInfo.Name.L,
 		PascalName:    utils.PascalCase(indexInfo.Name.L),
 		Unique:        indexInfo.Unique,
@@ -282,10 +283,10 @@ type FKMeta struct {
 
 func NewFKMeta(ctx *Context, tableMeta *TableMeta, fkInfo *model.FKInfo) (*FKMeta, error) {
 	ret := &FKMeta{
+		FKInfo:       fkInfo,
 		Table:        tableMeta,
 		Name:         fkInfo.Name.L,
 		PascalName:   utils.PascalCase(fkInfo.Name.L),
-		FKInfo:       fkInfo,
 		ColNames:     make([]string, 0, len(fkInfo.Cols)),
 		RefTableName: fkInfo.RefTable.L,
 		RefColNames:  make([]string, 0, len(fkInfo.RefCols)),

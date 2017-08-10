@@ -46,6 +46,22 @@ func (rf *ResultFieldMeta) IsSet() bool {
 	return rf.Type.Tp == mysql.TypeSet
 }
 
+func (rf *ResultFieldMeta) Elems() []string {
+	return rf.Type.Elems
+}
+
+func (rf *ResultFieldMeta) IsNotNULL() bool {
+	return mysql.HasNotNullFlag(rf.Type.Flag)
+}
+
+func (rf *ResultFieldMeta) IsAutoInc() bool {
+	return mysql.HasAutoIncrementFlag(rf.Type.Flag)
+}
+
+func (rf *ResultFieldMeta) IsOnUpdateNow() bool {
+	return mysql.HasOnUpdateNowFlag(rf.Type.Flag)
+}
+
 // TableRefsMeta contains meta information of table references (e.g. 'FROM' part of SELECT statement).
 //
 // CASE 1:
