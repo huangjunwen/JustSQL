@@ -30,27 +30,27 @@ func init() {
 {{- $retStructFieldTypeList := stringList -}}
 {{- $retFieldNameFlattenList := stringList -}}
 {{- range $i, $rf := $rfs -}}
-	{{/* $wildcardTableRefName != "" if the result field is inside a wildcard */}}
 	{{- $wildcardTableRefName := $.OriginStmt.FieldList.WildcardTableRefName $i -}}
-	{{- $wildcardTableIsNormal := and ($.OriginStmt.TableRefs.IsNormalTable $wildcardTableRefName) (not ($.OriginStmt.TableRefs.IsDerivedTable $wildcardTableRefName)) -}}
-	{{- $wildcardOffset := $.OriginStmt.FieldList.WildcardOffset $i -}}
-	{{- $inCurrDB := eq $rf.DBName (dbname) -}}
-
-	{{- if and $wildcardTableIsNormal $inCurrDB -}}
-		{{- if eq $wildcardOffset 0 -}}
-			{{- append $retFieldNameList $wildcardTableRefName -}}
-			{{- append $retFieldTypeList (printf "*%s" $rf.Table.PascalName) -}}
-			{{- append $retStructFieldNameList (last $retFieldNameList) -}}
-			{{- append $retStructFieldTypeList $rf.Table.PascalName -}}
+	{{- $wildcardTable := $.OriginStmt.TableRefs.TableMeta $wildcardTableRefName -}}
+	{{/* Only when this result field is in a wildcard table and the table is in current database */}}
+	{{- if notNil $wildcardTable -}}
+		{{- if eq $wildcardTable.DB.Name (dbname) -}}
+			{{- $wildcardColumnOffset := $.OriginStmt.FieldList.WildcardColumnOffset $i -}}
+			{{- if eq $wildcardColumnOffset 0 -}}
+				{{- append $retFieldNameList $wildcardTableRefName -}}
+				{{- append $retFieldTypeList (printf "*%s" $wildcardTable.PascalName) -}}
+				{{- append $retStructFieldNameList (last $retFieldNameList) -}}
+				{{- append $retStructFieldTypeList $wildcardTable.PascalName -}}
+			{{- end -}}
+			{{- append $retFieldNameFlattenList (printf "%s.%s" (last $retFieldNameList) (index $wildcardTable.Columns $wildcardColumnOffset).PascalName) }}
+		{{- else -}}
+			{{- append $retFieldNameList $rf.Name -}}
+			{{- append $retFieldTypeList (typeName $rf.Type) -}}
+			{{- append $retFieldNameFlattenList (last $retFieldNameList) }}
 		{{- end -}}
-		{{- append $retFieldNameFlattenList (printf "%s.%s" (last $retFieldNameList) $rf.Column.PascalName) }}
 	{{- else -}}
 		{{- append $retFieldNameList $rf.Name -}}
-		{{- if and (or $rf.IsEnum $rf.IsSet) (notNil $rf.Table) $inCurrDB }}
-			{{- append $retFieldTypeList (printf "%s%s" $rf.Table.PascalName $rf.Column.PascalName) -}}
-		{{- else }}
-			{{- append $retFieldTypeList (typeName $rf.Type) -}}
-		{{- end }}
+		{{- append $retFieldTypeList (typeName $rf.Type) -}}
 		{{- append $retFieldNameFlattenList (last $retFieldNameList) }}
 	{{- end -}}
 {{- end -}}

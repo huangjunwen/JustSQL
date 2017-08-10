@@ -18,30 +18,11 @@ type ResultFieldMeta struct {
 
 	// Field type.
 	Type *types.FieldType
-
-	// If this is a field from table column.
-	// The following will have values.
-	DB     *DBMeta
-	Table  *TableMeta
-	Column *ColumnMeta
 }
 
 func NewResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, error) {
 
-	var dbMeta *DBMeta = nil
-	var tableMeta *TableMeta = nil
-	var columnMeta *ColumnMeta = nil
 	var err error
-
-	// Real TableInfo has name.
-	if rf.Table.Name.L != "" {
-		dbMeta, err = ctx.GetDBMeta(rf.DBName.L)
-		if err != nil {
-			return nil, err
-		}
-		tableMeta = dbMeta.Tables[rf.Table.Name.L]
-		columnMeta = tableMeta.Columns[rf.Column.Offset]
-	}
 
 	// Determin the name.
 	name, err := resultFieldName(rf, false)
@@ -53,9 +34,6 @@ func NewResultFieldMeta(ctx *Context, rf *ast.ResultField) (*ResultFieldMeta, er
 		ResultField: rf,
 		Name:        name,
 		Type:        &rf.Column.FieldType,
-		DB:          dbMeta,
-		Table:       tableMeta,
-		Column:      columnMeta,
 	}, nil
 
 }
@@ -66,30 +44,6 @@ func (rf *ResultFieldMeta) IsEnum() bool {
 
 func (rf *ResultFieldMeta) IsSet() bool {
 	return rf.Type.Tp == mysql.TypeSet
-}
-
-// Return database name if this is a field from normal table.
-func (rf *ResultFieldMeta) DBName() string {
-	if rf.DB == nil {
-		return ""
-	}
-	return rf.DB.Name
-}
-
-// Return table name if this is a field from normal table.
-func (rf *ResultFieldMeta) TableName() string {
-	if rf.Table == nil {
-		return ""
-	}
-	return rf.Table.Name
-}
-
-// Return column name if this is a field from normal table.
-func (rf *ResultFieldMeta) ColumnName() string {
-	if rf.Column == nil {
-		return ""
-	}
-	return rf.Column.Name
 }
 
 // TableRefsMeta contains meta information of table references (e.g. 'FROM' part of SELECT statement).
@@ -113,9 +67,11 @@ type TableRefsMeta struct {
 	//   - tbl_name
 	//   - other_database.tbl_name
 	//   - alias
-	Tables         []*ast.TableSource
-	TableRefNames  []string
-	TableIsDerived []bool
+	Tables        []*ast.TableSource
+	TableRefNames []string
+
+	// Not nil if Tables[i] is normal table.
+	TableMetas []*TableMeta
 
 	// Map table ref name to its index.
 	// Similar to github.com/tidb/plan/resolver.go:resolverContext,
@@ -126,12 +82,13 @@ type TableRefsMeta struct {
 func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, error) {
 
 	ret := &TableRefsMeta{
-		Tables:         make([]*ast.TableSource, 0),
-		TableRefNames:  make([]string, 0),
-		TableIsDerived: make([]bool, 0),
-		TableMap:       make(map[string]int),
+		Tables:        make([]*ast.TableSource, 0),
+		TableRefNames: make([]string, 0),
+		TableMetas:    make([]*TableMeta, 0),
+		TableMap:      make(map[string]int),
 	}
 
+	// Refs can be nil: "SELECT 3"
 	if refs == nil {
 		return ret, nil
 	}
@@ -149,7 +106,7 @@ func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, 
 
 				var (
 					tableRefName string
-					isDerived    bool = false
+					tableMeta    *TableMeta
 				)
 
 				switch s := r.Source.(type) {
@@ -158,10 +115,14 @@ func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, 
 					if tableRefName == "" {
 						tableRefName = ctx.UniqueTableName(s.Schema.L, s.Name.L)
 					}
+					if dbMeta, err := ctx.GetDBMeta(s.Schema.L); err != nil {
+						return err
+					} else {
+						tableMeta = dbMeta.Tables[s.Name.L]
+					}
 
 				default:
 					tableRefName = r.AsName.L
-					isDerived = true
 				}
 
 				if tableRefName == "" {
@@ -174,7 +135,7 @@ func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, 
 				ret.TableMap[tableRefName] = len(ret.Tables)
 				ret.Tables = append(ret.Tables, r)
 				ret.TableRefNames = append(ret.TableRefNames, tableRefName)
-				ret.TableIsDerived = append(ret.TableIsDerived, isDerived)
+				ret.TableMetas = append(ret.TableMetas, tableMeta)
 
 			case *ast.Join:
 				if err := collect(r); err != nil {
@@ -230,20 +191,16 @@ func (t *TableRefsMeta) GetResultFields(tableRefName string) []*ast.ResultField 
 
 }
 
-func (t *TableRefsMeta) IsNormalTable(tableRefName string) bool {
-	i, ok := t.TableMap[tableRefName]
-	if !ok {
-		return false
-	}
-	return !t.TableIsDerived[i]
-}
+// TableMeta return *TableMeta if tableRefName references a normal table or nil
+// if tableRefName references a derived table.
+func (t *TableRefsMeta) TableMeta(tableRefName string) *TableMeta {
 
-func (t *TableRefsMeta) IsDerivedTable(tableRefName string) bool {
-	i, ok := t.TableMap[tableRefName]
+	idx, ok := t.TableMap[tableRefName]
 	if !ok {
-		return false
+		return nil
 	}
-	return t.TableIsDerived[i]
+	return t.TableMetas[idx]
+
 }
 
 // WildcardMeta contain information for a wildcard.
@@ -288,11 +245,16 @@ func (f *FieldListMeta) addWildcard(tableRefName string, resultFieldOffset int, 
 // NewFieldListMeta create FieldListMeta from the field list and table refs of a SELECT statement.
 func NewFieldListMeta(ctx *Context, stmt *ast.SelectStmt, tableRefsMeta *TableRefsMeta) (*FieldListMeta, error) {
 
+	if err := ensureSelectStmtCompiled(ctx, stmt); err != nil {
+		return nil, err
+	}
+
+	rfsn := len(stmt.GetResultFields())
 	ret := &FieldListMeta{
 		Wildcards:             make([]WildcardMeta, 0),
-		ResultFieldToWildcard: make([]int, len(stmt.GetResultFields())),
+		ResultFieldToWildcard: make([]int, rfsn),
 	}
-	for i := 0; i < len(stmt.GetResultFields()); i++ {
+	for i := 0; i < rfsn; i++ {
 		ret.ResultFieldToWildcard[i] = -1
 	}
 
@@ -326,9 +288,9 @@ func NewFieldListMeta(ctx *Context, stmt *ast.SelectStmt, tableRefsMeta *TableRe
 
 	}
 
-	if offset != len(stmt.GetResultFields()) {
+	if offset != rfsn {
 		return nil, fmt.Errorf("[bug?] Field list expanded length(%d) != Result field length(%d)",
-			offset, len(stmt.GetResultFields()))
+			offset, rfsn)
 	}
 
 	return ret, nil
@@ -349,9 +311,9 @@ func (f *FieldListMeta) WildcardTableRefName(i int) string {
 
 }
 
-// WildcardOffset return the offset inside wildcard of the i-th result field
+// WildcardColumnOffset return the offset inside wildcard of the i-th result field
 // or -1 if the result field is not inside wildcard.
-func (f *FieldListMeta) WildcardOffset(i int) int {
+func (f *FieldListMeta) WildcardColumnOffset(i int) int {
 
 	if i < 0 || i >= len(f.ResultFieldToWildcard) {
 		return -1
@@ -376,16 +338,24 @@ type SelectStmtMeta struct {
 // NewSelectStmtMeta create SelectStmtMeta from *ast.SelectStmt.
 func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, error) {
 
-	if err := ensureSelectStmtCompiled(ctx, stmt); err != nil {
-		return nil, err
-	}
-
 	ret := &SelectStmtMeta{
 		SelectStmt: stmt,
 	}
 
-	// Extract result fields meta.
-	rfs := stmt.GetResultFields()
+	var err error
+
+	// Execute the statement to verify it and also extract result fields meta.
+	rs, err := ctx.DB.Execute(stmt.Text())
+	if err != nil {
+		return nil, err
+	}
+	if len(rs) < 1 {
+		return nil, fmt.Errorf("NewSelectStmtMeta: No RecordSet return")
+	}
+	rfs, err := rs[0].Fields()
+	if err != nil {
+		return nil, err
+	}
 	ret.ResultFields = make([]*ResultFieldMeta, 0, len(rfs))
 	for _, rf := range rfs {
 		rfm, err := NewResultFieldMeta(ctx, rf)
@@ -393,6 +363,11 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 			return nil, err
 		}
 		ret.ResultFields = append(ret.ResultFields, rfm)
+	}
+
+	// ....
+	if err = ensureSelectStmtCompiled(ctx, stmt); err != nil {
+		return nil, err
 	}
 
 	// Extract table refs meta.
@@ -407,6 +382,13 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 		return nil, err
 	} else {
 		ret.FieldList = flm
+	}
+
+	// Some rough checks.
+	// BUG: "SELECT u.*, justsql.u.* FROM user u"
+	if len(ret.FieldList.ResultFieldToWildcard) != len(ret.ResultFields) {
+		return nil, fmt.Errorf("[bug] Expanded field list num(%d) != result fields num(%d)",
+			len(ret.FieldList.ResultFieldToWildcard), len(ret.ResultFields))
 	}
 
 	return ret, nil
@@ -519,7 +501,18 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 		stmt = stmts[0].(*ast.SelectStmt)
 	}
 
-	return NewSelectStmtMeta(ctx, stmt)
+	// Create new stmt meta.
+	ret, err := NewSelectStmtMeta(ctx, stmt)
+	if err != nil {
+		return nil, err
+	}
+
+	// Rough checks.
+	if len(s.ResultFields) != len(ret.ResultFields) {
+		return nil, fmt.Errorf("[bug] Wildcard expanded result fields num(%d) != origin result fields num(%d)",
+			len(s.ResultFields), len(ret.ResultFields))
+	}
+	return ret, nil
 
 }
 

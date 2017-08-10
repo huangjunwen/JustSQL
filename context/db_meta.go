@@ -31,7 +31,7 @@ func NewDBMeta(ctx *Context, dbInfo *model.DBInfo) (*DBMeta, error) {
 		Tables:     make(map[string]*TableMeta),
 	}
 	for _, tableInfo := range dbInfo.Tables {
-		tableMeta, err := NewTableMeta(ctx, tableInfo)
+		tableMeta, err := NewTableMeta(ctx, ret, tableInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -43,6 +43,8 @@ func NewDBMeta(ctx *Context, dbInfo *model.DBInfo) (*DBMeta, error) {
 // TableMeta contains meta information of a table.
 type TableMeta struct {
 	*model.TableInfo
+
+	DB *DBMeta
 
 	Name       string
 	PascalName string
@@ -59,8 +61,9 @@ type TableMeta struct {
 	columnByName map[string]*ColumnMeta
 }
 
-func NewTableMeta(ctx *Context, tableInfo *model.TableInfo) (*TableMeta, error) {
+func NewTableMeta(ctx *Context, dbMeta *DBMeta, tableInfo *model.TableInfo) (*TableMeta, error) {
 	ret := &TableMeta{
+		DB:           dbMeta,
 		TableInfo:    tableInfo,
 		Name:         tableInfo.Name.L,
 		PascalName:   utils.PascalCase(tableInfo.Name.L),
@@ -71,7 +74,7 @@ func NewTableMeta(ctx *Context, tableInfo *model.TableInfo) (*TableMeta, error) 
 	}
 
 	for _, columnInfo := range tableInfo.Columns {
-		columnMeta, err := NewColumnMeta(ctx, columnInfo)
+		columnMeta, err := NewColumnMeta(ctx, ret, columnInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -86,13 +89,13 @@ func NewTableMeta(ctx *Context, tableInfo *model.TableInfo) (*TableMeta, error) 
 		}
 	}
 
-	if indexMeta := NewIndexMetaFromPKHandler(ctx, tableInfo); indexMeta != nil {
+	if indexMeta := NewIndexMetaFromPKHandler(ctx, ret); indexMeta != nil {
 		ret.Indices = append(ret.Indices, indexMeta)
 		ret.primaryIndex = indexMeta
 	}
 
 	for _, indexInfo := range tableInfo.Indices {
-		indexMeta, err := NewIndexMeta(ctx, indexInfo)
+		indexMeta, err := NewIndexMeta(ctx, ret, indexInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -106,7 +109,7 @@ func NewTableMeta(ctx *Context, tableInfo *model.TableInfo) (*TableMeta, error) 
 	}
 
 	for _, fkInfo := range tableInfo.ForeignKeys {
-		fkMeta, err := NewFKMeta(ctx, fkInfo)
+		fkMeta, err := NewFKMeta(ctx, ret, fkInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -167,6 +170,8 @@ func (t *TableMeta) ColumnByName(name string) *ColumnMeta {
 type ColumnMeta struct {
 	*model.ColumnInfo
 
+	Table *TableMeta
+
 	Name       string
 	PascalName string
 
@@ -176,8 +181,9 @@ type ColumnMeta struct {
 	Type *types.FieldType
 }
 
-func NewColumnMeta(ctx *Context, columnInfo *model.ColumnInfo) (*ColumnMeta, error) {
+func NewColumnMeta(ctx *Context, tableMeta *TableMeta, columnInfo *model.ColumnInfo) (*ColumnMeta, error) {
 	return &ColumnMeta{
+		Table:      tableMeta,
 		ColumnInfo: columnInfo,
 		Name:       columnInfo.Name.L,
 		PascalName: utils.PascalCase(columnInfo.Name.L),
@@ -218,6 +224,8 @@ func (c *ColumnMeta) DefaultValue() interface{} {
 type IndexMeta struct {
 	*model.IndexInfo
 
+	Table *TableMeta
+
 	Name       string
 	PascalName string
 
@@ -226,8 +234,9 @@ type IndexMeta struct {
 	ColumnIndices []int
 }
 
-func NewIndexMeta(ctx *Context, indexInfo *model.IndexInfo) (*IndexMeta, error) {
+func NewIndexMeta(ctx *Context, tableMeta *TableMeta, indexInfo *model.IndexInfo) (*IndexMeta, error) {
 	ret := &IndexMeta{
+		Table:         tableMeta,
 		IndexInfo:     indexInfo,
 		Name:          indexInfo.Name.L,
 		PascalName:    utils.PascalCase(indexInfo.Name.L),
@@ -242,12 +251,14 @@ func NewIndexMeta(ctx *Context, indexInfo *model.IndexInfo) (*IndexMeta, error) 
 }
 
 // see: https://github.com/pingcap/tidb/issues/3746
-func NewIndexMetaFromPKHandler(ctx *Context, tableInfo *model.TableInfo) *IndexMeta {
+func NewIndexMetaFromPKHandler(ctx *Context, tableMeta *TableMeta) *IndexMeta {
+	tableInfo := tableMeta.TableInfo
 	if !tableInfo.PKIsHandle {
 		return nil
 	}
 	columnInfo := tableInfo.GetPkColInfo()
 	return &IndexMeta{
+		Table:         tableMeta,
 		Name:          "primary",
 		Unique:        true,
 		Primary:       true,
@@ -259,6 +270,8 @@ func NewIndexMetaFromPKHandler(ctx *Context, tableInfo *model.TableInfo) *IndexM
 type FKMeta struct {
 	*model.FKInfo
 
+	Table *TableMeta
+
 	Name       string
 	PascalName string
 
@@ -267,8 +280,9 @@ type FKMeta struct {
 	RefColNames  []string
 }
 
-func NewFKMeta(ctx *Context, fkInfo *model.FKInfo) (*FKMeta, error) {
+func NewFKMeta(ctx *Context, tableMeta *TableMeta, fkInfo *model.FKInfo) (*FKMeta, error) {
 	ret := &FKMeta{
+		Table:        tableMeta,
 		Name:         fkInfo.Name.L,
 		PascalName:   utils.PascalCase(fkInfo.Name.L),
 		FKInfo:       fkInfo,
