@@ -67,25 +67,25 @@ type TableRefsMeta struct {
 	//   - tbl_name
 	//   - other_database.tbl_name
 	//   - alias
-	Tables        []*ast.TableSource
+	TableSources  []*ast.TableSource
 	TableRefNames []string
 
-	// Not nil if Tables[i] is normal table.
+	// Not nil if TableSources[i] is normal table.
 	TableMetas []*TableMeta
 
 	// Map table ref name to its index.
 	// Similar to github.com/tidb/plan/resolver.go:resolverContext,
-	// but only use one map to enforce name uniqueness for normal tables and derived tables.
-	TableMap map[string]int
+	// but only use one map to enforce name uniqueness for both normal tables and derived tables.
+	TableRefNameMap map[string]int
 }
 
 func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, error) {
 
 	ret := &TableRefsMeta{
-		Tables:        make([]*ast.TableSource, 0),
-		TableRefNames: make([]string, 0),
-		TableMetas:    make([]*TableMeta, 0),
-		TableMap:      make(map[string]int),
+		TableSources:    make([]*ast.TableSource, 0),
+		TableRefNames:   make([]string, 0),
+		TableMetas:      make([]*TableMeta, 0),
+		TableRefNameMap: make(map[string]int),
 	}
 
 	// Refs can be nil: "SELECT 3"
@@ -126,14 +126,14 @@ func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, 
 				}
 
 				if tableRefName == "" {
-					return fmt.Errorf("[bug?] No name for table source[%d]", len(ret.Tables))
+					return fmt.Errorf("[bug?] No name for table source[%d]", len(ret.TableSources))
 				}
-				if _, ok := ret.TableMap[tableRefName]; ok {
+				if _, ok := ret.TableRefNameMap[tableRefName]; ok {
 					return fmt.Errorf("Duplicate table name/alias %+q, plz checkout JustSQL's document",
 						tableRefName)
 				}
-				ret.TableMap[tableRefName] = len(ret.Tables)
-				ret.Tables = append(ret.Tables, r)
+				ret.TableRefNameMap[tableRefName] = len(ret.TableSources)
+				ret.TableSources = append(ret.TableSources, r)
 				ret.TableRefNames = append(ret.TableRefNames, tableRefName)
 				ret.TableMetas = append(ret.TableMetas, tableMeta)
 
@@ -156,7 +156,7 @@ func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, 
 
 	// Check name duplication for CASE 2
 	names := map[string]string{}
-	for tableRefName, _ := range ret.TableMap {
+	for tableRefName, _ := range ret.TableRefNameMap {
 
 		parts := strings.Split(tableRefName, ".")
 		name := ""
@@ -183,11 +183,11 @@ func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, 
 // GetResultFields return a list of result field of the table or nil if not exists.
 func (t *TableRefsMeta) GetResultFields(tableRefName string) []*ast.ResultField {
 
-	idx, ok := t.TableMap[tableRefName]
+	idx, ok := t.TableRefNameMap[tableRefName]
 	if !ok {
 		return nil
 	}
-	return t.Tables[idx].Source.GetResultFields()
+	return t.TableSources[idx].Source.GetResultFields()
 
 }
 
@@ -195,7 +195,7 @@ func (t *TableRefsMeta) GetResultFields(tableRefName string) []*ast.ResultField 
 // if tableRefName references a derived table.
 func (t *TableRefsMeta) TableMeta(tableRefName string) *TableMeta {
 
-	idx, ok := t.TableMap[tableRefName]
+	idx, ok := t.TableRefNameMap[tableRefName]
 	if !ok {
 		return nil
 	}
@@ -276,7 +276,7 @@ func NewFieldListMeta(ctx *Context, stmt *ast.SelectStmt, tableRefsMeta *TableRe
 			continue
 		}
 		// Unqualified wildcard ("*")
-		for i, table := range tableRefsMeta.Tables {
+		for i, table := range tableRefsMeta.TableSources {
 			tableRefName := tableRefsMeta.TableRefNames[i]
 			rfs := table.GetResultFields()
 			if len(rfs) == 0 {
@@ -471,7 +471,7 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 		} else {
 
 			// Unqualified wildcard ("*")
-			for i, table := range s.TableRefs.Tables {
+			for i, table := range s.TableRefs.TableSources {
 
 				tableRefName = s.TableRefs.TableRefNames[i]
 				rfs := table.GetResultFields()
