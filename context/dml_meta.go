@@ -241,21 +241,42 @@ type FieldListMeta struct {
 	ResultFieldToWildcard []int
 }
 
-func (f *FieldListMeta) addWildcard(tableRefName string, resultFieldOffset int, resultFieldNum int) {
+func (f *FieldListMeta) addWildcard(tableRefName string, resultFieldOffset int, resultFieldNum int) error {
 
+	errPrefix := fmt.Sprintf("addWildcard(%+q, %d, %d)", tableRefName, resultFieldOffset,
+		resultFieldNum)
+
+	// Check index boundary.
+	if resultFieldOffset < 0 {
+		return fmt.Errorf("%s: resultFieldOffset==%d", errPrefix, resultFieldOffset)
+	}
+	if resultFieldNum <= 0 {
+		return fmt.Errorf("%s: resultFieldNum==%d", errPrefix, resultFieldNum)
+	}
+	if resultFieldOffset+resultFieldNum > len(f.ResultFieldToWildcard) {
+		return fmt.Errorf("%s: %d+%d>%d", errPrefix, resultFieldOffset, resultFieldNum,
+			len(f.ResultFieldToWildcard))
+	}
+
+	// Mark.
 	idx := len(f.Wildcards)
 	for i := resultFieldOffset; i < resultFieldOffset+resultFieldNum; i++ {
+		// Wildcard overlapped?
 		if f.ResultFieldToWildcard[i] != -1 {
-			panic(fmt.Errorf("f.ResultFieldToWildcard[%d] == %d != -1", i, f.ResultFieldToWildcard[i]))
+			return fmt.Errorf("%s: f.ResultFieldToWildcard[%d] == %d", errPrefix,
+				i, f.ResultFieldToWildcard[i])
 		}
 		f.ResultFieldToWildcard[i] = idx
 	}
+
+	// Save wildcard meta.
 	f.Wildcards = append(f.Wildcards, WildcardMeta{
 		TableRefName:      tableRefName,
 		ResultFieldOffset: resultFieldOffset,
 		ResultFieldNum:    resultFieldNum,
 	})
 
+	return nil
 }
 
 // NewFieldListMeta create FieldListMeta from the field list and table refs of a SELECT statement.
@@ -274,9 +295,11 @@ func NewFieldListMeta(ctx *Context, stmt *ast.SelectStmt, tableRefsMeta *TableRe
 		ret.ResultFieldToWildcard[i] = -1
 	}
 
+	// Also see github.com/pingcap/tidb/plan/resolver.go createResultFields
 	offset := 0
 	for _, f := range stmt.Fields.Fields {
 		if f.WildCard == nil {
+			// Each one non-wildcard field -> one result field.
 			offset += 1
 			continue
 		}
@@ -284,10 +307,9 @@ func NewFieldListMeta(ctx *Context, stmt *ast.SelectStmt, tableRefsMeta *TableRe
 		tableRefName := ctx.UniqueTableName(f.WildCard.Schema.L, f.WildCard.Table.L)
 		if tableRefName != "" {
 			rfs := tableRefsMeta.GetResultFields(tableRefName)
-			if len(rfs) == 0 {
-				return nil, fmt.Errorf("[bug?] TableRefsMeta.GetResultFields(%+q) == nil", tableRefName)
+			if err := ret.addWildcard(tableRefName, offset, len(rfs)); err != nil {
+				return nil, err
 			}
-			ret.addWildcard(tableRefName, offset, len(rfs))
 			offset += len(rfs)
 			continue
 		}
@@ -295,10 +317,9 @@ func NewFieldListMeta(ctx *Context, stmt *ast.SelectStmt, tableRefsMeta *TableRe
 		for i, table := range tableRefsMeta.TableSources {
 			tableRefName := tableRefsMeta.TableRefNames[i]
 			rfs := table.GetResultFields()
-			if len(rfs) == 0 {
-				return nil, fmt.Errorf("[bug?] Table[%+q].GetResultFields() == nil", tableRefName)
+			if err := ret.addWildcard(tableRefName, offset, len(rfs)); err != nil {
+				return nil, err
 			}
-			ret.addWildcard(tableRefName, offset, len(rfs))
 			offset += len(rfs)
 		}
 
@@ -381,7 +402,8 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 		ret.ResultFields = append(ret.ResultFields, rfm)
 	}
 
-	// ....
+	// To extract more information from the SELECT statement itself, it needs to
+	// be compiled.
 	if err = ensureSelectStmtCompiled(ctx, stmt); err != nil {
 		return nil, err
 	}
@@ -403,7 +425,7 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 	// Some rough checks.
 	// BUG: "SELECT u.*, justsql.u.* FROM user u"
 	if len(ret.FieldList.ResultFieldToWildcard) != len(ret.ResultFields) {
-		return nil, fmt.Errorf("[bug] Expanded field list num(%d) != result fields num(%d)",
+		return nil, fmt.Errorf("[bug] Different result fields num %d != %d",
 			len(ret.FieldList.ResultFieldToWildcard), len(ret.ResultFields))
 	}
 
@@ -525,7 +547,7 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 
 	// Rough checks.
 	if len(s.ResultFields) != len(ret.ResultFields) {
-		return nil, fmt.Errorf("[bug] Wildcard expanded result fields num(%d) != origin result fields num(%d)",
+		return nil, fmt.Errorf("[bug] Wildcard expanded different result fields num %d != %d",
 			len(s.ResultFields), len(ret.ResultFields))
 	}
 	return ret, nil
