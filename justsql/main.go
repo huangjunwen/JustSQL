@@ -2,12 +2,12 @@ package main
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"github.com/huangjunwen/JustSQL/context"
 	"github.com/huangjunwen/JustSQL/render"
+	// Remember to import builtin templates. Otherwise files will be
+	// all empty.
 	_ "github.com/huangjunwen/JustSQL/templates/dft"
-	"github.com/huangjunwen/JustSQL/utils"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/ast"
 	"go/format"
@@ -16,99 +16,187 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"text/template"
 )
 
-type StringArr []string
-
-func (a *StringArr) String() string {
-	if a == nil {
-		return ""
-	}
-	return strings.Join([]string(*a), ";")
-}
-
-func (a *StringArr) Set(val string) error {
-	*a = append(*a, val)
-	return nil
-}
-
+// Call Initialize to fill these globals.
 var (
-	// Global options.
-	log_level  string
-	ddl_globs  StringArr
-	dml_globs  StringArr
-	output_dir string
-	no_format  bool
-	// Global variables.
-	package_name string
-	ctx          *context.Context
-	renderer     *render.Renderer
+	options     *Options
+	packageName string
+	ctx         *context.Context
+	renderer    *render.Renderer
 )
 
-func parseOptionsAndInit() {
+func Initialize() {
 
-	flag.StringVar(&log_level, "loglevel", "error", "Set level of logging: fatal/error/warn/info/debug.")
-	flag.Var(&ddl_globs, "ddl", "Glob of DDL files (file containing DDL SQL). Multiple \"-ddl\" is allowed.")
-	flag.Var(&dml_globs, "dml", "Glob of DML files (file containing DML SQL). Multiple \"-dml\" is allowed.")
-	flag.StringVar(&output_dir, "o", "", "Output directory.")
-	flag.BoolVar(&no_format, "nofmt", false, "Do not format (go fmt) output files.")
-	flag.Parse()
+	var err error
+	options = ParseOptions()
 
+	// Set log options.
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+	log.SetLevelByString(options.LogLevel)
 
-	switch log_level {
-	case "fatal", "error", "warn", "warning", "info", "debug":
-		log.SetLevelByString(log_level)
-	default:
-		log.Fatalf("-l: illegal log level %q", log_level)
-	}
-
-	if output_dir == "" {
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	abs_output_dir, err := filepath.Abs(output_dir)
-	if err != nil {
-		log.Fatalf("filepath.Abs(%q): %s", output_dir, err)
-	}
-
-	fi, err := os.Stat(abs_output_dir)
-	if err != nil {
-		log.Fatalf("os.Stat(%q): %s", abs_output_dir, err)
-	}
-
-	if !fi.IsDir() {
-		log.Fatalf("FileInfo.IsDir(%q): false", abs_output_dir)
-	}
-
-	base := filepath.Base(abs_output_dir)
-	if !utils.IsIdent(base) {
-		log.Fatalf("filepath.Base(%q): is not a valid go package name", abs_output_dir)
-	}
-
-	output_dir = abs_output_dir
-	log.Infof("Output directory: %q", output_dir)
-
-	package_name = base
+	// Get package name.
+	// Already checked in option parsing.
+	packageName = filepath.Base(options.OutputDir)
 
 	// Init context.
 	ctx, err = context.NewContext("", "")
 	if err != nil {
-		log.Fatalf("NewContext: %s", err)
+		log.Fatalf("NewContext(): %s", err)
 	}
 
-	// Init render context.
+	// Init renderer.
 	renderer, err = render.NewRenderer(ctx)
 	if err != nil {
-		log.Fatalf("NewRenderContext: %s", err)
+		log.Fatalf("NewRenderer(): %s", err)
 	}
 
 }
 
-var pkg_file_head_tmpl = template.Must(template.New("pkg_file_head").Parse(`
+func ReadFilesFromGlobs(globs []string) func() (string, []byte, bool) {
+
+	fileNames := []string{}
+	for _, glob := range globs {
+
+		fns, err := filepath.Glob(glob)
+		if err != nil {
+			log.Fatalf("filepath.Glob(%+q): %s", glob, err)
+		}
+
+		if len(fns) == 0 {
+			continue
+		}
+
+		// Sort file names.
+		sort.Strings(fns)
+
+		for _, fn := range fns {
+			absFn, err := filepath.Abs(fn)
+			if err != nil {
+				log.Fatalf("filepath.Abs(%+q): %s", fn, err)
+			}
+			fileNames = append(fileNames, absFn)
+		}
+
+	}
+
+	i := 0
+	return func() (fileName string, fileContent []byte, ok bool) {
+
+		for {
+			if i >= len(fileNames) {
+				ok = false
+				return
+			}
+
+			var err error
+
+			fileName = fileNames[i]
+			fi, err := os.Stat(fileName)
+			if err != nil {
+				log.Fatalf("os.Stat(%+q): %s", fileName, err)
+			}
+			if fi.IsDir() {
+				// Skip directories.
+				continue
+			}
+
+			log.Infof("ioutil.ReadFile(%+q)", fileName)
+			fileContent, err = ioutil.ReadFile(fileName)
+			if err != nil {
+				log.Fatalf("ioutil.ReadFile(%+q): %s", fileName, err)
+			}
+
+			ok = true
+			i += 1
+			return
+		}
+		return
+
+	}
+
+}
+
+func LoadTemplate() {
+
+	log.Infof("LoadTemplate(): starts...")
+
+	globs := []string{}
+	for _, templateDir := range options.Template {
+		globs = append(globs, filepath.Join(templateDir, "*.tmpl"))
+	}
+
+	iter := ReadFilesFromGlobs(globs)
+	for fileName, fileContent, ok := iter(); ok; fileName, fileContent, ok = iter() {
+
+		// Directory name as template name.
+		templateName := filepath.Base(filepath.Dir(fileName))
+
+		// File name as type name.
+		typeName := filepath.Base(fileName)
+		typeName = typeName[:len(typeName)-5] // strip ".tmpl"
+
+		// Load template.
+		log.Infof("LoadTemplate(): file %+q", fileName)
+		if err := renderer.AddTemplate(typeName, templateName, string(fileContent)); err != nil {
+			log.Fatalf("Renderer.AddTemplate(%+q): %s", fileName, err)
+		}
+
+	}
+
+	log.Infof("LoadTemplate(): ended.")
+
+}
+
+func LoadDDL() {
+
+	db := ctx.DB
+	iter := ReadFilesFromGlobs(options.DDL)
+	log.Infof("LoadDDL(): starts...")
+
+	for fileName, fileContent, ok := iter(); ok; fileName, fileContent, ok = iter() {
+
+		// Parse content.
+		fileContentString := string(fileContent)
+		stmts, err := db.Parse(fileContentString)
+		if err != nil {
+			log.Fatalf("LoadDDL(): file %+q, parsing got error: %s", fileName, err)
+		}
+
+		for _, stmt := range stmts {
+
+			stmtText := stmt.Text()
+			log.Infof("LoadDDL(): file %+q, statement: %+q", fileName, stmtText)
+
+			switch stmt.(type) {
+			// Allow create/drop/alter table/index.
+			case *ast.CreateTableStmt, *ast.AlterTableStmt, *ast.DropTableStmt, *ast.RenameTableStmt,
+				*ast.CreateIndexStmt, *ast.DropIndexStmt:
+			// Also allow set statement.
+			case *ast.SetStmt:
+			default:
+				log.Fatalf("LoadDDL(): file %+q, %T is not an allowed DDL. ", fileName, stmt)
+			}
+
+			// Run it.
+			if _, err := db.Execute(stmtText); err != nil {
+				log.Fatalf("LoadDDL(): file: %+q, execution got error: %s", fileName, err)
+			}
+
+		}
+
+	}
+
+	if _, err := ctx.GetDBMeta(ctx.DBName); err != nil {
+		log.Fatalf("LoadDDL(): GetDBMeta(%+q) got error: %s", ctx.DBName, err)
+	}
+
+	log.Infof("LoadDDL(): ended.")
+
+}
+
+var sourceHeader = template.Must(template.New("sourceHeader").Parse(`
 package {{ .PackageName }}
 
 import (
@@ -124,208 +212,123 @@ import (
 
 `))
 
-func writeOutputFileHead(w io.Writer) error {
-	return pkg_file_head_tmpl.Execute(w, map[string]interface{}{
-		"PackageName": package_name,
+func OutputFile(fileName string, content io.Reader) {
+
+	var buf bytes.Buffer
+
+	// Write header.
+	if err := sourceHeader.Execute(&buf, map[string]interface{}{
+		"PackageName": packageName,
 		"Imports":     renderer.Scopes.CurrScope().ListPkg(),
-	})
-}
-
-func writeOutputFile(output_filename string, body io.Reader) {
-
-	var output bytes.Buffer
-
-	// Write head.
-	if err := writeOutputFileHead(&output); err != nil {
-		log.Fatalf("writeOutputFileHead(%q): %s", output_filename, err)
+	}); err != nil {
+		log.Fatalf("ExportFile(%+q): output source header error: %s", fileName, err)
 	}
 
-	// Write body.
-	io.Copy(&output, body)
+	// Write content.
+	io.Copy(&buf, content)
 
 	// Open file.
-	f, err := os.OpenFile(filepath.Join(output_dir, output_filename), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	f, err := os.OpenFile(filepath.Join(options.OutputDir, fileName),
+		os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
-		log.Fatalf("os.OpenFile(%q): %s", output_filename, err)
+		log.Fatalf("os.OpenFile(%+q): %s", fileName, err)
 	}
 	defer f.Close()
 
-	if !no_format {
-		if formatted, err := format.Source(output.Bytes()); err != nil {
-			log.Fatalf("format.Source(%q): %s", output_filename, err)
+	// Output.
+	if !options.NoFormat {
+		if formatted, err := format.Source(buf.Bytes()); err != nil {
+			log.Fatalf("format.Source(%q): %s", fileName, err)
 		} else {
 			if _, err := f.Write(formatted); err != nil {
-				log.Fatalf("File.Write(%q): %s", output_filename, err)
+				log.Fatalf("File.Write(%q): %s", fileName, err)
 			}
 		}
 	} else {
-		if _, err := f.Write(output.Bytes()); err != nil {
-			log.Fatalf("File.Write(%q): %s", output_filename, err)
+		if _, err := f.Write(buf.Bytes()); err != nil {
+			log.Fatalf("File.Write(%q): %s", fileName, err)
 		}
 	}
 
 }
 
-func readGlobs(globs []string) func() (string, []byte, bool) {
+func OutputTables() {
 
-	files := []string{}
-	for _, glob := range globs {
-		f, err := filepath.Glob(glob)
-		if err != nil {
-			log.Fatalf("filepath.Glob(%q): %s", glob, err)
-		}
+	log.Infof("OutputTables(): starts...")
 
-		if len(f) == 0 {
-			continue
-		}
-
-		// Sort file names
-		sort.Strings(f)
-
-		files = append(files, f...)
-	}
-
-	i := 0
-	return func() (string, []byte, bool) {
-		if i >= len(files) {
-			return "", nil, false
-		}
-
-		file := files[i]
-		log.Infof("ioutil.ReadFile(%q) ...", file)
-		content, err := ioutil.ReadFile(file)
-		if err != nil {
-			log.Fatalf("ioutil.ReadFile(%q): %s", file, err)
-		}
-
-		i += 1
-		return file, content, true
-	}
-
-}
-
-func loadDDL() {
-
-	db := ctx.DB
-	iter := readGlobs(ddl_globs)
-	log.Infof("DDL loading ...")
-
-	for file, content, ok := iter(); ok; file, content, ok = iter() {
-
-		// Parse content.
-		content_str := string(content)
-		stmts, err := db.Parse(content_str)
-		if err != nil {
-			log.Fatalf("db.Parse(%q): %s", file, err)
-		}
-
-		// Check and run DDL.
-		for _, stmt := range stmts {
-
-			stmt_text := stmt.Text()
-			switch stmt.(type) {
-			default:
-				log.Fatalf("%q: %q (%T) is not an allowed statement type", file, stmt_text, stmt)
-
-			// Allow only create/drop/alter table/index.
-			case *ast.CreateTableStmt, *ast.AlterTableStmt, *ast.DropTableStmt, *ast.RenameTableStmt,
-				*ast.CreateIndexStmt, *ast.DropIndexStmt:
-
-			// Also allow set statement.
-			case *ast.SetStmt:
-			}
-
-			// Run it.
-			log.Infof("db.Execute(%q) ...", stmt_text)
-			if _, err := db.Execute(stmt_text); err != nil {
-				log.Fatalf("db.Execute(): %s", err)
-			}
-		}
-
-	}
-
-	if _, err := ctx.GetDBMeta(ctx.DBName); err != nil {
-		log.Fatalf("ctx.GetDBMeta(%+q): %s", ctx.DBName, err)
-	}
-
-	log.Infof("DDL loaded")
-
-}
-
-func exportTables() {
-
-	db_meta, err := ctx.GetDBMeta(ctx.DBName)
+	dbMeta, err := ctx.GetDBMeta(ctx.DBName)
 	if err != nil {
 		log.Fatalf("ctx.GetDBMeta(%+q): %s", ctx.DBName, err)
 	}
 
-	for _, table_meta := range db_meta.Tables {
+	for _, tableMeta := range dbMeta.Tables {
 
-		log.Infof("exportTable(%q) ...", table_meta.Name)
+		log.Infof("OutputTables(): table %+q", tableMeta.Name)
 
-		scope := fmt.Sprintf("%s.tb.go", table_meta.Name)
+		scope := fmt.Sprintf("%s.tb.go", tableMeta.Name)
 		renderer.Scopes.SwitchScope(scope)
 
-		var body bytes.Buffer
-		if err := renderer.Render(table_meta, &body); err != nil {
-			log.Fatalf("render.Render(%q): %s", scope, err)
+		var buf bytes.Buffer
+		if err := renderer.Render(tableMeta, &buf); err != nil {
+			log.Fatalf("Renderer.Render(%q): %s", scope, err)
 		}
 
-		writeOutputFile(scope, &body)
+		OutputFile(scope, &buf)
 	}
+
+	log.Infof("OutputTables(): ended.")
+
 }
 
-func processDML() {
+func LoadAndOutputDML() {
 
 	db := ctx.DB
-	iter := readGlobs(dml_globs)
-	log.Infof("DML processing ...")
+	iter := ReadFilesFromGlobs(options.DML)
+	log.Infof("LoadAndOutputDML(): starts...")
 
-	for file, content, ok := iter(); ok; file, content, ok = iter() {
+	for fileName, fileContent, ok := iter(); ok; fileName, fileContent, ok = iter() {
 
-		scope := fmt.Sprintf("%s.go", filepath.Base(file))
-		renderer.Scopes.SwitchScope(file)
+		scope := fmt.Sprintf("%s.go", filepath.Base(fileName))
+		renderer.Scopes.SwitchScope(scope)
 
-		var body bytes.Buffer
+		var buf bytes.Buffer
 
-		// Parse content.
-		content_str := string(content)
-		stmts, err := db.Parse(content_str)
+		// Parse.
+		stmts, err := db.Parse(string(fileContent))
 		if err != nil {
-			log.Fatalf("db.Parse(%q): %s", file, err)
+			log.Fatalf("LoadAndOutputDML(): parsing %+q error %s", fileName, err)
 		}
 
 		// Check and render stmts.
 		for _, stmt := range stmts {
 
-			stmt_text := stmt.Text()
-			switch stmt.(type) {
-			default:
-				log.Fatalf("%q: %q (%T) is not an allowed statement type", file, stmt_text, stmt)
+			stmtText := stmt.Text()
+			log.Infof("LoadAndOutputDML(): file %+q, statement: %+q", fileName, stmtText)
 
+			switch stmt.(type) {
 			case *ast.SelectStmt, *ast.InsertStmt, *ast.DeleteStmt, *ast.UpdateStmt:
+			default:
+				log.Fatalf("LoadAndOutputDML(): file %+q, %T is not an allowed DML. ", fileName, stmt)
 			}
 
-			if err := renderer.Render(stmt, &body); err != nil {
-				log.Fatalf("render.Render(%q): %s", stmt_text, err)
+			if err := renderer.Render(stmt, &buf); err != nil {
+				log.Fatalf("Renderer.Render(%q): %s", scope, err)
 			}
 
 		}
 
-		// Output to file.
-		writeOutputFile(scope, &body)
+		OutputFile(scope, &buf)
 
 	}
 
-	log.Infof("DDL processed")
+	log.Infof("LoadAndOutputDML(): ended.")
 
 }
 
 func main() {
-
-	parseOptionsAndInit()
-	loadDDL()
-	exportTables()
-	processDML()
-
+	Initialize()
+	LoadTemplate()
+	LoadDDL()
+	OutputTables()
+	LoadAndOutputDML()
 }
