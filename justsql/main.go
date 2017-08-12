@@ -201,9 +201,9 @@ package {{ .PackageName }}
 
 import (
 {{ range $i, $pkg := .Imports -}}
-{{ $pkg_path := index $pkg 0 -}}
-{{ $pkg_name := index $pkg 1 -}}
-	{{ printf "%s" $pkg_name }} {{ printf "%q" $pkg_path }}
+{{ $pkgPath := index $pkg 0 -}}
+{{ $pkgName := index $pkg 1 -}}
+	{{ $pkgName }} {{ printf "%q" $pkgPath }}
 {{ end -}}
 )
 
@@ -325,10 +325,25 @@ func LoadAndOutputDML() {
 
 }
 
+func OutputStandalone() {
+
+	scope := "justsql.go"
+	renderer.Scopes.SwitchScope(scope)
+
+	var buf bytes.Buffer
+	if err := renderer.Render(nil, &buf); err != nil {
+		log.Fatalf("Renderer.Render(%q): %s", scope, err)
+	}
+
+	OutputFile(scope, &buf)
+
+}
+
 func main() {
 	Initialize()
 	LoadTemplate()
 	LoadDDL()
 	OutputTables()
 	LoadAndOutputDML()
+	OutputStandalone()
 }

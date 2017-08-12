@@ -139,10 +139,15 @@ func handleUpdateStmt(r *Renderer, obj interface{}) (interface{}, error) {
 
 }
 
+func handleStandalone(r *Renderer, obj interface{}) (interface{}, error) {
+	return nil, nil
+}
+
 func init() {
 	RegistType("table", (*context.TableMeta)(nil), handleTableMeta)
 	RegistType("select", (*ast.SelectStmt)(nil), handleSelectStmt)
 	RegistType("insert", (*ast.InsertStmt)(nil), handleInsertStmt)
 	RegistType("delete", (*ast.DeleteStmt)(nil), handleDeleteStmt)
 	RegistType("update", (*ast.UpdateStmt)(nil), handleUpdateStmt)
+	RegistType("standalone", (interface{})(nil), handleStandalone)
 }
