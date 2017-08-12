@@ -83,7 +83,7 @@ func new{{ $retName }}() *{{ $retName }} {
 {{/*        sql template         */}}
 {{/* =========================== */}}
 
-var _{{ $funcName }}SQLTmpl = template.Must(template.New({{ printf "%q" $funcName }}).Parse("" +
+var _{{ $funcName }}SQLTmpl = {{ $template }}.Must({{ $template }}.New({{ printf "%q" $funcName }}).Parse("" +
 {{- range $line := split .Annot.Text "\n" }}
 	"{{ printf "%s" $line }} " +
 {{- end }}""))
@@ -109,7 +109,7 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 	}
 
 	// - Render from template.
-	buf_ := new(bytes.Buffer)
+	buf_ := new({{ $bytes }}.Buffer)
 	if err_ := _{{ $funcName }}SQLTmpl.Execute(buf_, dot_); err_ != nil {
 		return nil, err_
 	}
@@ -122,7 +122,7 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 
 {{ if $hasInBinding -}}
 	// - Handle "IN (?)".
-	query_, args_, err_ := {{ $sqlx }}.In(query_, args_...)
+	query_, args_, err_ = {{ $sqlx }}.In(query_, args_...)
 	if err_ != nil {
 		return nil, err_
 	}
@@ -133,15 +133,12 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 
 {{ if eq $returnStyle "one" -}}
 	// - Query.
-	row_, err_ := db_.QueryRowContext(ctx_, query_, args_...)
-	if err_ != nil {
-		return nil, err_
-	}
+	row_ := db_.QueryRowContext(ctx_, query_, args_...)
 
 	// - Scan.
 	ret_ := new{{ $retName }}()
-	if err_ := row_.Scan({{ range $i, $name := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $name }}{{ end }}); err != nil {
-		return nil, err
+	if err_ := row_.Scan({{ range $i, $name := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $name }}{{ end }}); err_ != nil {
+		return nil, err_
 	}
 
 	return ret_, nil
@@ -151,19 +148,19 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 	if err_ != nil {
 		return nil, err_
 	}
-	defer rows_.Rows.Close()
+	defer rows_.Close()
 
 	// - Scan.
 	ret_ := make([]*{{ $retName }}, 0)
-	for rows_.Rows.Next() {
+	for rows_.Next() {
 		r_ := new{{ $retName }}()
-		if err_ := rows_.Rows.Scan({{ range $i, $name := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $name }}{{ end }}); err != nil {
+		if err_ := rows_.Scan({{ range $i, $name := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&r_.{{ $name }}{{ end }}); err_ != nil {
 			return nil, err_
 		}
 		ret_ = append(ret_, r_)
 	}
 	
-	if err_ := rows_.Rows.Err(); err_ != nil {
+	if err_ := rows_.Err(); err_ != nil {
 		return nil, err_
 	}
 
