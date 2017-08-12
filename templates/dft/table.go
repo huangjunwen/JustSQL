@@ -235,6 +235,10 @@ type {{ $structName }} struct {
 {{- end }}
 }
 
+{{/* =========================== */}}
+{{/*     insert/update/delete    */}}
+{{/* =========================== */}}
+
 // Insert insert an entry of {{ $tableName }} into database.
 func (entry_ *{{ $structName }}) Insert(ctx_ {{ $ctx }}.Context, db_ DBer) error {
 
@@ -260,20 +264,6 @@ func (entry_ *{{ $structName }}) Insert(ctx_ {{ $ctx }}.Context, db_ DBer) error
 }
 
 {{ if ne (len $primaryCols) 0 -}}
-
-func (entry_ *{{ $structName }}) Select(ctx_ {{ $ctx }}.Context, db_ DBer) error {
-
-	sql_ := {{ $sqlx }}.Rebind(BindType, "SELECT {{ join (columnNames $cols) ", " }} "+
-		"FROM {{ $tableName }} " +
-		"WHERE {{ range $i, $col := $primaryCols }}{{ if ne $i 0 }}AND {{ end }}{{ $col.Name }}=? {{ end }}")
-
-	row_ := db_.QueryRowContext(ctx_, sql_{{ range $i, $col := $primaryCols }}, entry_.{{ $col.PascalName }}{{ end }})
-	if err_ := row_.Scan({{ range $i, $field := $structFieldNames }}{{ if ne $i 0 }}, {{ end }}&entry_.{{ $field }}{{ end }}); err_ != nil {
-		return err_
-	}
-
-	return nil
-}
 
 func (entry_ *{{ $structName }}) Update(ctx_ {{ $ctx }}.Context, db_ DBer) (int64, error) {
 
@@ -304,6 +294,51 @@ func (entry_ *{{ $structName }}) Delete(ctx_ {{ $ctx }}.Context, db_ DBer) (int6
 }
 
 {{ end }}
+
+{{/* =========================== */}}
+{{/*          unique indices     */}}
+{{/* =========================== */}}
+
+{{- range $i, $index := .Table.Indices }}
+	{{- if $index.Unique }}
+	{{/* =========================== */}}
+	{{/*   unique index variables    */}}
+	{{/* =========================== */}}
+		{{- $indexCols := $index.Columns }}
+		{{- $argNameList := stringList }}
+		{{- $argTypeList := stringList }}
+		{{- range $j, $col := $indexCols }}
+			{{- append $argNameList (camel $col.Name) }}
+			{{- append $argTypeList (typeName $col.Type) }}
+		{{- end }}
+		{{- $argNames := $argNameList.Strings }}
+		{{- $argTypes := $argTypeList.Strings }}
+
+	{{/* =========================== */}}
+	{{/*      unique index code      */}}
+	{{/* =========================== */}}
+
+// {{ $structName }}By{{ $index.PascalName }} query {{ printf "%+q" $tableName }} table by {{ if $index.Primary }}primary key.{{ else }}unique key {{ printf "%+q" $index.Name }}.{{ end }}
+func {{ $structName }}By{{ $index.PascalName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $j, $argName := $argNames }}, {{ $argName }} {{ index $argTypes $j }}{{ end }}) (*{{ $structName }}, error) {
+
+	sql_ := {{ $sqlx }}.Rebind(BindType, "SELECT {{ join (columnNames $cols) ", " }} " +
+		"FROM {{ $tableName }} " +
+		"WHERE {{ range $j, $col := $indexCols }}{{ if ne $j 0 }}AND {{ end }}{{ $col.Name }}=? {{ end }}")
+
+	row_ := db_.QueryRowContext(ctx_, sql_{{ range $j, $argName := $argNames }}, {{ $argName }}{{ end }})
+
+	entry_ := new({{ $structName }})
+	if err_ := row_.Scan({{ range $j, $field := $structFieldNames }}{{ if ne $j 0 }}, {{ end }}&entry_.{{ $field }}{{ end }}); err_ != nil {
+		return nil, err_
+	}
+
+	return entry_, nil
+}
+
+	{{- end }}
+{{- end }}
+
+
 
 `)
 

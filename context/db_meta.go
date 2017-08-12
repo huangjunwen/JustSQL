@@ -261,10 +261,19 @@ func NewIndexMetaFromPKHandler(ctx *Context, tableMeta *TableMeta) *IndexMeta {
 	return &IndexMeta{
 		Table:         tableMeta,
 		Name:          "primary",
+		PascalName:    "Primary",
 		Unique:        true,
 		Primary:       true,
 		ColumnIndices: []int{columnInfo.Offset},
 	}
+}
+
+func (i *IndexMeta) Columns() []*ColumnMeta {
+	ret := []*ColumnMeta{}
+	for _, idx := range i.ColumnIndices {
+		ret = append(ret, i.Table.Columns[idx])
+	}
+	return ret
 }
 
 // FKMeta contains meta data of a foreign key.
