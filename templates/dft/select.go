@@ -21,7 +21,7 @@ func init() {
 {{- $funcName := .Annot.FuncName -}}
 {{- $rfs := .Stmt.ResultFields -}}
 {{- $retName := printf "%sResult" .Annot.FuncName -}}
-{{- $hasInBinding := gt (len .Annot.InBindings) 0 -}}
+{{- $hasInBinding := ne (.Annot.Env "hasInBinding") "" -}}
 {{- $returnStyle := .Annot.ReturnStyle -}}
 
 {{- $retFieldNameList := uniqueStringList (fn "pascal") "NoNameField" -}}

@@ -11,7 +11,7 @@ var (
 	BindNamePrefix string = ":"
 )
 
-// Declare a global setting annotation.
+// SettingAnnot changes global settings.
 type SettingAnnot struct{}
 
 func (a *SettingAnnot) SetPrimary(val string) error {
@@ -132,13 +132,10 @@ func (a *ArgAnnot) Set(key, val string) error {
 	return nil
 }
 
-// Declare a binding.
+// BindAnnot declare a query binding.
 type BindAnnot struct {
 	// Bind arg name.
 	Name string
-
-	// The binding is used for "IN (?, ?, ?)"
-	In bool
 }
 
 func (a *BindAnnot) SetPrimary(val string) error {
@@ -156,8 +153,31 @@ func (a *BindAnnot) Set(key, val string) error {
 	switch key {
 	default:
 		return fmt.Errorf("bind: unknown option %+q", key)
-	case "in":
-		a.In = true
+	case "":
+		return nil
+	}
+	return nil
+}
+
+// EnvAnnot declare arbitary key/value pairs like enviroment.
+type EnvAnnot struct {
+	Env map[string]string
+}
+
+func (a *EnvAnnot) SetPrimary(val string) error {
+	if val != "" {
+		return fmt.Errorf("env : expect no primary value but got %+q", val)
+	}
+	return nil
+}
+
+func (a *EnvAnnot) Set(key, val string) error {
+	switch key {
+	default:
+		if a.Env == nil {
+			a.Env = make(map[string]string)
+		}
+		a.Env[key] = val
 	case "":
 		return nil
 	}
@@ -170,6 +190,7 @@ func init() {
 	RegistAnnot((*FuncAnnot)(nil), "func")
 	RegistAnnot((*ArgAnnot)(nil), "arg", "param")
 	RegistAnnot((*BindAnnot)(nil), "bind")
+	RegistAnnot((*EnvAnnot)(nil), "env")
 }
 
 // AnnotMeta contains meta information of annotations.
@@ -192,11 +213,8 @@ type AnnotMeta struct {
 	// Return style.
 	ReturnStyle
 
-	// List of binding name.
-	Bindings []string
-
-	// "IN (?)" bindings (index of Bindings)
-	InBindings []int
+	// Arbitrary key/values.
+	Envs map[string]string
 }
 
 var noNameCnt int = 0
@@ -205,10 +223,9 @@ var noNameCnt int = 0
 func NewAnnotMeta(src string) (*AnnotMeta, error) {
 
 	ret := &AnnotMeta{
-		SrcText:    src,
-		Args:       make([]*ArgAnnot, 0),
-		Bindings:   make([]string, 0),
-		InBindings: make([]int, 0),
+		SrcText: src,
+		Args:    make([]*ArgAnnot, 0),
+		Envs:    make(map[string]string),
 	}
 
 	comments, err := ScanComment(src)
@@ -244,11 +261,12 @@ func NewAnnotMeta(src string) (*AnnotMeta, error) {
 				return nil, fmt.Errorf("bind: %q missing enclosure", a.Name)
 			}
 			parts = append(parts, BindNamePrefix+a.Name)
-			if a.In {
-				ret.InBindings = append(ret.InBindings, len(ret.Bindings))
-			}
-			ret.Bindings = append(ret.Bindings, a.Name)
 			comment = comments[i]
+
+		case *EnvAnnot:
+			for k, v := range a.Env {
+				ret.Envs[k] = v
+			}
 
 		default:
 		}
@@ -266,4 +284,12 @@ func NewAnnotMeta(src string) (*AnnotMeta, error) {
 
 	return ret, nil
 
+}
+
+func (a *AnnotMeta) Env(key string) string {
+	val, ok := a.Envs[key]
+	if !ok {
+		return ""
+	}
+	return val
 }

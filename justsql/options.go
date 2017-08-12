@@ -80,14 +80,14 @@ func ParseOptions() *Options {
 	var configFile string
 	var help bool
 	options := &Options{}
-	flag.StringVar(&configFile, "conf", "", "Configure file in JSON format.")
+	flag.StringVar(&configFile, "conf", "", "Configure file in JSON format. If omitted, justsql will try to find 'justsql.json' in current dir.")
 	flag.BoolVar(&help, "h", false, "Print help.")
 	flag.StringVar(&options.OutputDir, "output_dir", "", "Output directory for generated files.")
 	flag.StringVar(&options.LogLevel, "log_level", "", "Log level: fatal/error/warn/info/debug")
 	flag.Var(&options.DDL, "ddl", "Glob of DDL files (file containing DDL SQL). Multiple \"-ddl\" is allowed.")
 	flag.Var(&options.DML, "dml", "Glob of DML files (file containing DML SQL). Multiple \"-ddl\" is allowed.")
 	flag.BoolVar(&options.NoFormat, "no_format", false, "Do not go format output files.")
-	flag.Var(&options.Template, "template", "Custom templates directory")
+	flag.Var(&options.Template, "template", "Custom templates directory.")
 	flag.Parse()
 
 	if help {
