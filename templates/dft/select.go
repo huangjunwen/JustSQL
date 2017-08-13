@@ -5,7 +5,7 @@ import (
 )
 
 func init() {
-	render.RegistBuiltinTemplate("select", render.DefaultTemplateName, `
+	render.RegistBuiltinTemplate("select", render.DefaultTemplateSetName, `
 {{/* =========================== */}}
 {{/*          imports            */}}
 {{/* =========================== */}}

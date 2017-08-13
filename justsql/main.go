@@ -123,15 +123,17 @@ func LoadTemplate() {
 	log.Infof("LoadTemplate(): starts...")
 
 	globs := []string{}
-	for _, templateDir := range options.Template {
+	for _, templateDir := range options.CustomTemplateDir {
 		globs = append(globs, filepath.Join(templateDir, "*.tmpl"))
 	}
+
+	lastTemplateSetName := ""
 
 	iter := ReadFilesFromGlobs(globs)
 	for fileName, fileContent, ok := iter(); ok; fileName, fileContent, ok = iter() {
 
-		// Directory name as template name.
-		templateName := filepath.Base(filepath.Dir(fileName))
+		// Directory name as template set name.
+		templateSetName := filepath.Base(filepath.Dir(fileName))
 
 		// File name as type name.
 		typeName := filepath.Base(fileName)
@@ -139,10 +141,17 @@ func LoadTemplate() {
 
 		// Load template.
 		log.Infof("LoadTemplate(): file %+q", fileName)
-		if err := renderer.AddTemplate(typeName, templateName, string(fileContent)); err != nil {
+		if err := renderer.AddTemplate(typeName, templateSetName, string(fileContent)); err != nil {
 			log.Fatalf("Renderer.AddTemplate(%+q): %s", fileName, err)
 		}
+		lastTemplateSetName = templateSetName
 
+	}
+
+	if options.TemplateSetName != "" {
+		renderer.Use(options.TemplateSetName)
+	} else if lastTemplateSetName != "" {
+		renderer.Use(lastTemplateSetName)
 	}
 
 	log.Infof("LoadTemplate(): ended.")

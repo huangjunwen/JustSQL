@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	RootTemplateName    = ""
-	DefaultTemplateName = "default"
+	RootTemplateSetName    = ""
+	DefaultTemplateSetName = "default"
 )
 
 // Handler takes a renderer and an object (TableMeta/SelectStmt...) as
@@ -23,7 +23,7 @@ var (
 	typeMap map[string]reflect.Type = make(map[string]reflect.Type)
 	// Map type -> handler
 	handlerMap map[reflect.Type]Handler = make(map[reflect.Type]Handler)
-	// Map type -> (template name -> template content)
+	// Map type -> (template set name -> template content)
 	templateMap map[reflect.Type]map[string]string = make(map[reflect.Type]map[string]string)
 	// True if Renderer has been created.
 	initialized = false
@@ -52,7 +52,7 @@ func RegistType(typeName string, obj interface{}, handler Handler) {
 }
 
 // RegistBuiltinTemplate regist a builtin template for a type with the given name.
-func RegistBuiltinTemplate(typeName string, templateName string, templateContent string) {
+func RegistBuiltinTemplate(typeName string, templateSetName string, templateContent string) {
 
 	if initialized {
 		panic(fmt.Errorf("RegistBuiltinTemplate: called after initialized"))
@@ -64,12 +64,12 @@ func RegistBuiltinTemplate(typeName string, templateName string, templateContent
 	}
 
 	templates := templateMap[t]
-	if _, ok := templates[templateName]; ok {
-		panic(fmt.Errorf("RegistBuiltinTemplate: template %+q of type %+q has already registered",
-			templateName, typeName))
+	if _, ok := templates[templateSetName]; ok {
+		panic(fmt.Errorf("RegistBuiltinTemplate: template set %+q of type %+q has already registered",
+			templateSetName, typeName))
 	}
 
-	templates[templateName] = templateContent
+	templates[templateSetName] = templateContent
 
 }
 
@@ -87,12 +87,13 @@ type Renderer struct {
 	// Extra functions used in templates.
 	ExtraFuncs template.FuncMap
 
-	// Root template is empty template used to create
-	// associated templates, see http://golang.org/pkg/text/template/#hdr-Associated_templates
-	RootTemplates map[reflect.Type]*template.Template
+	// Map type -> (template set name -> template).
+	Templates map[reflect.Type]map[string]*template.Template
 
-	// Templates used to render object.
-	Templates map[reflect.Type]*template.Template
+	// Use which set of templates for renderring.
+	// Find the first of TemplateSetName/DefaultTemplateSetName/RootTemplateSetName
+	// to render.
+	TemplateSetName string
 }
 
 // NewRenderer create Renderer from Context.
@@ -102,10 +103,10 @@ func NewRenderer(ctx *context.Context) (*Renderer, error) {
 	initialized = true
 
 	ret := &Renderer{
-		Context:       ctx,
-		Scopes:        NewScopes(),
-		RootTemplates: make(map[reflect.Type]*template.Template),
-		Templates:     make(map[reflect.Type]*template.Template),
+		Context:         ctx,
+		Scopes:          NewScopes(),
+		Templates:       make(map[reflect.Type]map[string]*template.Template),
+		TemplateSetName: DefaultTemplateSetName,
 	}
 
 	ret.TypeAdapter = NewTypeAdapter(ret.Scopes)
@@ -113,45 +114,52 @@ func NewRenderer(ctx *context.Context) (*Renderer, error) {
 
 	for _, t := range typeMap {
 		// Create empty root template for each registered type.
-		root := template.Must(template.New(RootTemplateName).Parse(""))
-		ret.RootTemplates[t] = root
-		ret.Templates[t] = root
+		root := template.Must(template.New(RootTemplateSetName).Parse(""))
+		ret.Templates[t] = map[string]*template.Template{
+			RootTemplateSetName: root,
+		}
 
 		// Parse all builtin templates.
-		for templateName, templateContent := range templateMap[t] {
-			tmpl := root.New(templateName).Funcs(ret.ExtraFuncs)
+		for templateSetName, templateContent := range templateMap[t] {
+			tmpl := root.New(templateSetName).Funcs(ret.ExtraFuncs)
 			if _, err := tmpl.Parse(templateContent); err != nil {
 				return nil, err
 			}
-			if templateName == DefaultTemplateName {
-				ret.Templates[t] = tmpl
-			}
+			ret.Templates[t][templateSetName] = tmpl
 		}
 	}
 
 	return ret, nil
 }
 
-// AddTemplate add a template for a type with the given name.
-// This latest added template is used as the main template to render the given type.
-func (r *Renderer) AddTemplate(typeName string, templateName string, templateContent string) error {
+// AddTemplate add a template (in a template set ) for a type.
+func (r *Renderer) AddTemplate(typeName string, templateSetName string, templateContent string) error {
+
+	if templateSetName == RootTemplateSetName {
+		return fmt.Errorf("AddTemplate: empty template name")
+	}
 
 	// Check type.
 	t, ok := typeMap[typeName]
 	if !ok {
-		return fmt.Errorf("AddTemplate: type %+q has not registered yet", typeName)
+		return fmt.Errorf("AddTemplate: type name %+q has not registered yet", typeName)
 	}
 
 	// Parse the template.
-	tmpl := r.RootTemplates[t].New(templateName).Funcs(r.ExtraFuncs)
+	tmpl := r.Templates[t][RootTemplateSetName].New(templateSetName).Funcs(r.ExtraFuncs)
 	if _, err := tmpl.Parse(templateContent); err != nil {
 		return err
 	}
 
-	// Latest added template is used as the main template.
-	r.Templates[t] = tmpl
+	// Store.
+	r.Templates[t][templateSetName] = tmpl
 
 	return nil
+}
+
+// Use set template set name for renderring.
+func (r *Renderer) Use(templateSetName string) {
+	r.TemplateSetName = templateSetName
 }
 
 // Render an object.
@@ -160,9 +168,20 @@ func (r *Renderer) Render(obj interface{}, w io.Writer) error {
 	t := reflect.TypeOf(obj)
 
 	// Choose template.
-	tmpl, ok := r.Templates[t]
+	tmpls, ok := r.Templates[t]
 	if !ok {
 		return fmt.Errorf("Render: don't know how to render %T", obj)
+	}
+
+	var tmpl *template.Template
+	for _, templateSetName := range [3]string{r.TemplateSetName, DefaultTemplateSetName, RootTemplateSetName} {
+		tmpl, ok = tmpls[templateSetName]
+		if ok {
+			break
+		}
+	}
+	if tmpl == nil {
+		panic(fmt.Errorf("Failed to find a template for renderring"))
 	}
 
 	// Generate 'dot' object.

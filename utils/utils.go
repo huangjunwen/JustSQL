@@ -8,6 +8,9 @@ import (
 )
 
 var (
+	// Version information.
+	BuildTS                     = "Unknwon"
+	GitHash                     = "Unknwon"
 	identRe      *regexp.Regexp = regexp.MustCompile(`[^A-Za-z]*([A-Za-z])([A-Za-z0-9]*)`)
 	exactIdentRe *regexp.Regexp = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 )

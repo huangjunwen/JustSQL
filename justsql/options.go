@@ -43,12 +43,13 @@ func (m *MutipleValues) UnmarshalJSON(data []byte) error {
 }
 
 type Options struct {
-	OutputDir string        `json:"output_dir"` // Output directory.
-	LogLevel  string        `json:"log_level"`  // Log level (fatal/error/warn/info/debug).
-	DDL       MutipleValues `json:"ddl"`        // DDL files.
-	DML       MutipleValues `json:"dml"`        // DML files.
-	NoFormat  bool          `json:"no_format"`  // Do not go format output files.
-	Template  MutipleValues `json:"template"`   // Custom template directory.
+	OutputDir         string        `json:"o"`     // Output directory.
+	LogLevel          string        `json:"ll"`    // Log level (fatal/error/warn/info/debug).
+	DDL               MutipleValues `json:"ddl"`   // DDL files.
+	DML               MutipleValues `json:"dml"`   // DML files.
+	NoFormat          bool          `json:"nofmt"` // Do not go format output files.
+	CustomTemplateDir MutipleValues `json:"t"`     // Add custom template set directory.
+	TemplateSetName   string        `json:"T"`     // Explicitly specify template set name for renderring.
 }
 
 func ParseOptions() *Options {
@@ -78,20 +79,29 @@ func ParseOptions() *Options {
 
 	// Parse options in command line.
 	var configFile string
-	var help bool
+	var help, version bool
 	options := &Options{}
 	flag.StringVar(&configFile, "conf", "", "Configure file in JSON format. If omitted, justsql will try to find 'justsql.json' in current dir.")
 	flag.BoolVar(&help, "h", false, "Print help.")
-	flag.StringVar(&options.OutputDir, "output_dir", "", "Output directory for generated files.")
-	flag.StringVar(&options.LogLevel, "log_level", "", "Log level: fatal/error/warn/info/debug")
+	flag.BoolVar(&version, "v", false, "Print version.")
+	flag.StringVar(&options.OutputDir, "o", "", "Output directory for generated files.")
+	flag.StringVar(&options.LogLevel, "ll", "", "Log level: fatal/error/warn/info/debug, default: error.")
 	flag.Var(&options.DDL, "ddl", "Glob of DDL files (file containing DDL SQL). Multiple \"-ddl\" is allowed.")
 	flag.Var(&options.DML, "dml", "Glob of DML files (file containing DML SQL). Multiple \"-ddl\" is allowed.")
-	flag.BoolVar(&options.NoFormat, "no_format", false, "Do not go format output files.")
-	flag.Var(&options.Template, "template", "Custom templates directory.")
+	flag.BoolVar(&options.NoFormat, "nofmt", false, "Do not go format output files.")
+	flag.Var(&options.CustomTemplateDir, "t", "Add custom templates set in specified directory. Multiple \"-t\" is allowed.")
+	flag.StringVar(&options.TemplateSetName, "T", "", "Explicitly specify template set name for renderring.")
 	flag.Parse()
 
 	if help {
 		printUsageAndExit(nil)
+	}
+
+	if version {
+		fmt.Fprintf(os.Stderr, "JustSQL Version info:\n")
+		fmt.Fprintf(os.Stderr, "  Build time: %s\n", utils.BuildTS)
+		fmt.Fprintf(os.Stderr, "  Git hash: %s\n", utils.GitHash)
+		os.Exit(0)
 	}
 
 	// Try to parse options in configure file (default to ./justsql.json).
@@ -128,7 +138,10 @@ func ParseOptions() *Options {
 		if configOptions.NoFormat {
 			options.NoFormat = true
 		}
-		options.Template = append(configOptions.Template, options.Template...)
+		options.CustomTemplateDir = append(configOptions.CustomTemplateDir, options.CustomTemplateDir...)
+		if options.TemplateSetName == "" && configOptions.TemplateSetName != "" {
+			options.TemplateSetName = configOptions.TemplateSetName
+		}
 	} else {
 		// Yield error only when config file is explicit.
 		if explicitConfigFile {
@@ -146,7 +159,7 @@ func ParseOptions() *Options {
 	}
 
 	if options.OutputDir == "" {
-		printUsageAndExit(fmt.Errorf("Missing -output_dir"))
+		printUsageAndExit(fmt.Errorf("Missing -o"))
 	}
 	absOutputDir := checkDir(options.OutputDir)
 	base := filepath.Base(absOutputDir)
@@ -156,13 +169,13 @@ func ParseOptions() *Options {
 	options.OutputDir = absOutputDir
 
 	absTempateDirs := []string{}
-	for _, templateDir := range options.Template {
+	for _, templateDir := range options.CustomTemplateDir {
 		if templateDir == "" {
 			continue
 		}
 		absTempateDirs = append(absTempateDirs, checkDir(templateDir))
 	}
-	options.Template = MutipleValues(absTempateDirs)
+	options.CustomTemplateDir = MutipleValues(absTempateDirs)
 
 	return options
 }
