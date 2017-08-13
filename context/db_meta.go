@@ -308,3 +308,43 @@ func NewFKMeta(ctx *Context, tableMeta *TableMeta, fkInfo *model.FKInfo) (*FKMet
 	}
 	return ret, nil
 }
+
+func (f *FKMeta) Columns() []*ColumnMeta {
+	ret := []*ColumnMeta{}
+	for _, colName := range f.ColNames {
+		ret = append(ret, f.Table.columnByName[colName])
+	}
+	return ret
+}
+
+func (f *FKMeta) RefTable() *TableMeta {
+	// XXX: Ref to another database?
+	return f.Table.DB.Tables[f.RefTableName]
+}
+
+func (f *FKMeta) RefColumns() []*ColumnMeta {
+	refTable := f.RefTable()
+	ret := []*ColumnMeta{}
+	for _, colName := range f.RefColNames {
+		ret = append(ret, refTable.columnByName[colName])
+	}
+	return ret
+}
+
+// RefIndex find the first index in ref table that this foreign key use.
+func (f *FKMeta) RefIndex() *IndexMeta {
+	for _, index := range f.RefTable().Indices {
+		indexColumns := index.Columns()
+		mismatch := false
+		for i, refColName := range f.RefColNames {
+			if refColName != indexColumns[i].Name {
+				mismatch = true
+				break
+			}
+		}
+		if !mismatch {
+			return index
+		}
+	}
+	panic(fmt.Errorf("Can't find an index for fk %s.%s", f.Table.Name, f.Name))
+}

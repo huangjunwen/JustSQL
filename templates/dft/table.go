@@ -228,7 +228,7 @@ func (s {{ $setName }}) Value() (driver.Value, error) {
 {{/*          main struct        */}}
 {{/* =========================== */}}
 
-// {{ $structName }} represents an entry of Table {{ $tableName }}.
+// {{ $structName }} represents an entry of table "{{ $tableName }}".
 type {{ $structName }} struct {
 {{- range $i, $col := $cols }}
 	{{ index $structFieldNames $i }} {{ index $structFieldTypes $i }} `+"`db:\"{{ $col.Name }}\"`"+` // {{ $col.Name }}
@@ -296,6 +296,24 @@ func (entry_ *{{ $structName }}) Delete(ctx_ {{ $ctx }}.Context, db_ DBer) (int6
 {{ end }}
 
 {{/* =========================== */}}
+{{/*         foreign key         */}}
+{{/* =========================== */}}
+
+{{- range $i, $fk := .Table.ForeignKeys }}
+	{{- $fkColumns := $fk.Columns }}
+	{{- $refTable := $fk.RefTable }}
+	{{- $refIndex := $fk.RefIndex }}
+	{{- if $refIndex.Unique }}
+
+// {{ $refTable.PascalName }} return {{ printf "%q" $refTable.Name }} entry by foreign key "{{ printf "%s.%s" $fk.Table.Name $fk.Name }}".
+func (entry_ *{{ $structName }}) {{ $refTable.PascalName }}(ctx_ {{ $ctx }}.Context, db_ DBer) (*{{ $refTable.PascalName }}, error) {
+	return {{ $refTable.PascalName }}By{{ $refIndex.PascalName }}(ctx_, db_{{ range $j, $col := $fkColumns }}, entry_.{{ $col.PascalName }}{{ end }})
+}
+	{{- end }}
+{{- end }}
+
+
+{{/* =========================== */}}
 {{/*          unique indices     */}}
 {{/* =========================== */}}
 
@@ -337,8 +355,6 @@ func {{ $structName }}By{{ $index.PascalName }}(ctx_ {{ $ctx }}.Context, db_ DBe
 
 	{{- end }}
 {{- end }}
-
-
 
 `)
 
