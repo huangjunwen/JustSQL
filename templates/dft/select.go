@@ -11,7 +11,6 @@ func init() {
 {{/* =========================== */}}
 {{- $ctx := imp "context" -}}
 {{- $sqlx := imp "github.com/jmoiron/sqlx" -}}
-{{- $sql := imp "database/sql" -}}
 {{- $template := imp "text/template" -}}
 {{- $bytes := imp "bytes" -}}
 
@@ -80,23 +79,19 @@ func new{{ $retName }}() *{{ $retName }} {
 }
 
 {{/* =========================== */}}
-{{/*        sql template         */}}
+{{/*        main function        */}}
 {{/* =========================== */}}
-
 var _{{ $funcName }}SQLTmpl = {{ $template }}.Must({{ $template }}.New({{ printf "%q" $funcName }}).Parse("" +
 {{- range $line := split .Annot.Text "\n" }}
 	"{{ printf "%s" $line }} " +
 {{- end }}""))
 
-{{/* =========================== */}}
-{{/*        main function        */}}
-{{/* =========================== */}}
 // {{ $funcName }} is generated from:
 //
 {{- range $line := split .OriginStmt.SelectStmt.Text "\n" }}
-{{- if ne (len $line) 0 }}
+	{{- if ne (len $line) 0 }}
 //    {{ printf "%s" $line }}
-{{- end }}
+	{{- end }}
 {{- end }}
 //
 func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Args }}, {{ $arg.Name }} {{ typeName $arg.Type }} {{ end }}) ({{ if eq $returnStyle "one" }}*{{ $retName }}{{ else if eq $returnStyle "many" }}[]*{{ $retName }}{{ end }}, error) {
