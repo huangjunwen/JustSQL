@@ -3,15 +3,14 @@ go:
   - 1.8
 install:
   - go get -d -v github.com/pingcap/tidb
-  - cd $GOPATH/src/github.com/pingcap/tidb && git checkout rc4 && make
-  - go get github.com/huangjunwen/JustSQL/justsql
+  - cd $GOPATH/src/github.com/pingcap/tidb && git checkout rc4 && make parserlib
+  - cd $GOPATH/src/github.com/huangjunwen/JustSQL && make
 deploy:
   provider: releases
   api_key:
     secure: q0IUfoAI6VxGP7ZUevjdOxTmlmcgJgKlOsjnyVAlomK7qrmAJW6GWeUjtOgyRT7uxup33UAbJCxjJiG2MnndhkOILeepQ5RHFeQVy5dgJx5kz7zqMlKWK3V9uQ77ou2nLLnKcOka4v8dqI67b1XfQKjytOYDT9RU3MYOYzmcsynoVFNdQBYp0pHLYY0ymwFHudEfhUxz9tYXygWiOMW8d6DCiItZBbcV6fqc0A4Plr4wCPNGOb/aLUvXgH1uAa2HYpujBWV2schZBdMbSi18frvNkQQPhEspgiIvB8Ev6DlNzl0ksXYUqUMtCC3ULATa9ZdEgqgWzfN++QNIjMGfr+dNBAy/r1/cH4I0tOe8BS4/XJBzhoKjnHbMAMfIIAOvXfkKu9M2d+F4qjYyzRg4EDGelk8f8mUtZP+d9yMkkxUncrdpiAfTTCcX/5QuwvmInlHnM7lMd6qUzrBnwVmJKG9AoM6aikJf0NIVmRtlErAEtOJhr+kycyhr5m8YW743ZzizYsvlg3SuPiFgSD8+K1Oy4czR8PEn921JgcZofcjP58JZVnU8DwMhFlZKsmmbyTY4jF0J7uhVNoYXhcLp+6IiEJfR8fkh+eXpLE7P5wh/mEqe8Mzfh5LhEfSKzE916G0d/2aRnS/gIEKrtKtEgNTilIeZ1KUjQrn8s/6MimI=
   file:
-    - $GOPATH/bin/justsql
-    - $GOPATH/src/github.com/pingcap/tidb/bin/tidb-server
+    - $GOPATH/src/github.com/huangjunwen/JustSQL/bin/justsql
   skip_cleanup: true
   on:
     repo: huangjunwen/JustSQL
