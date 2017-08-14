@@ -128,6 +128,7 @@ Some unique features are presented here:
 There is not much to say about `ddl.sql`, let's focus on `dml.sql`.
 
 There are three SQL queries in `dml.sql`, also note that there are some special comments (so called _'annotations'_) before and inside the SQLs. Annotations are comments that having content starts with `$` to provide extra information about how to generate warpper code, or modification to the query. Here is the list:
+
 | Name | Example | Usage |
 |------|---------|-------|
 | $func | $func:FuncName return:one | Declare a wrapper function and its return style: 'one' for single row and 'many' (default) for multiple rows |
