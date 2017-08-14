@@ -106,7 +106,7 @@ type QueryBlogResult struct {
 }
 
 var _QueryBlogSQLTmpl = template.Must(template.New("QueryBlog").Parse("" +
-    "SELECT b.id, b.fill_time, b.user_id, b.title, b.content, u.nick " +
+    "SELECT b.id, b.fill_time, b.user_id, b.title, b.content, u.id, u.fill_time, u.nick, u.gender, u.tag " +
     "FROM blog b JOIN user u ON (b.user_id=u.id) " +
     "WHERE 1 " +
     "    {{ if ne .userNick \"\" }}AND u.nick=:userNick {{ end }} " +
