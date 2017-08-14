@@ -33,7 +33,8 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 
 	const sql_ = "" +
 {{- range $line := split .Annot.Text "\n" }}
-		"{{ printf "%s" $line }} " +
+	{{- $lineSP := printf "%s%s" $line " " }}
+		{{ printf "%+q" $lineSP }} +
 {{- end }}""
 
 	// - Dot object for query parameter.

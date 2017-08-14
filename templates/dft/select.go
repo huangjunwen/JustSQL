@@ -83,7 +83,8 @@ func new{{ $retName }}() *{{ $retName }} {
 {{/* =========================== */}}
 var _{{ $funcName }}SQLTmpl = {{ $template }}.Must({{ $template }}.New({{ printf "%q" $funcName }}).Parse("" +
 {{- range $line := split .Annot.Text "\n" }}
-	"{{ printf "%s" $line }} " +
+	{{- $lineSP := printf "%s%s" $line " " }}
+	{{ printf "%+q" $lineSP }} +
 {{- end }}""))
 
 // {{ $funcName }} is generated from:
