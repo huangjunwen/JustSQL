@@ -6,20 +6,30 @@ ifeq "$(VER)" ""
 	VER := $(shell git rev-parse --short HEAD)
 endif
 
+BIN := bin
+TARGET := justsql
+
 ifneq "$(GOOS)" ""
-	TARGET := bin/justsql-$(VER)-$(GOOS)-$(GOARCH)
+	TARGET_TARBALL := $(TARGET)-$(VER)-$(GOOS)-$(GOARCH).tgz
 else
-	TARGET := bin/justsql-$(VER)-$(OS)-$(MACHINE)
+	TARGET_TARBALL := $(TARGET)-$(VER)-$(OS)-$(MACHINE).tgz
 endif
 
 GOBUILD := CGO_ENABLED=0 go build
 LDFLAGS += -X "github.com/huangjunwen/JustSQL/utils.BuildTS=$(shell date)"
 LDFLAGS += -X "github.com/huangjunwen/JustSQL/utils.GitHash=$(shell git rev-parse HEAD)"
 
-all: $(TARGET).tgz
+all: help
+	
+.PHONY: help
 
-$(TARGET).tgz: $(TARGET)
-	tar -zcvf $(TARGET).tgz $(TARGET)
+help:
+	@echo "Use 'GOOS=xxx GOARCH=xxx make release' to build release. GOOS and GOARCH can be empty."
+	
+release: $(BIN)/$(TARGET_TARBALL)
 
-$(TARGET):
-	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -ldflags '$(LDFLAGS)' -o $(TARGET) "github.com/huangjunwen/JustSQL/justsql"
+$(BIN)/$(TARGET_TARBALL): $(BIN)/$(TARGET)
+	cd $(BIN) && tar -zcvf $(TARGET_TARBALL) $(TARGET) && rm $(TARGET)
+
+$(BIN)/$(TARGET):
+	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -ldflags '$(LDFLAGS)' -o $(BIN)/$(TARGET) "github.com/huangjunwen/JustSQL/justsql"

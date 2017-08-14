@@ -4,8 +4,8 @@ go:
 install:
   - go get -d -v github.com/pingcap/tidb
   - cd $GOPATH/src/github.com/pingcap/tidb && git checkout rc4 && make parserlib
-  - cd $GOPATH/src/github.com/huangjunwen/JustSQL && GOOS=linux GOARCH=amd64 make
-  - cd $GOPATH/src/github.com/huangjunwen/JustSQL && GOOS=darwin GOARCH=amd64 make
+  - cd $GOPATH/src/github.com/huangjunwen/JustSQL && GOOS=linux GOARCH=amd64 make release
+  - cd $GOPATH/src/github.com/huangjunwen/JustSQL && GOOS=darwin GOARCH=amd64 make release
 deploy:
   provider: releases
   api_key:
