@@ -6,6 +6,7 @@ import (
 	"github.com/pingcap/tidb/ast"
 	"github.com/pingcap/tidb/mysql"
 	"github.com/pingcap/tidb/util/types"
+	"regexp"
 	"strings"
 )
 
@@ -433,6 +434,9 @@ func NewSelectStmtMeta(ctx *Context, stmt *ast.SelectStmt) (*SelectStmtMeta, err
 
 }
 
+var wildcardRe *regexp.Regexp = regexp.MustCompile(
+	`^((([A-Za-z][A-Za-z0-9_]*)` + "|" + "(`[A-Za-z][A-Za-z0-9_]*`)" + `)\s*\.\s*){0,2}\*`)
+
 // This function expand all wildcards ("*") in a SELECT statement and return
 // a new equivalent one. This is useful since "SELECT * ..." may lead to
 // unpredictable error when table is altered.
@@ -472,19 +476,12 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 
 		// Calculate this wildcard field length to forward offset.
 		// XXX: field.Text() return "" so i need to construct the field text myself -_-
-		// TODO: use regexp to parse this
-		fieldText := "*"
-		if field.WildCard.Table.O != "" {
-			fieldText = field.WildCard.Table.O + ".*"
-			if field.WildCard.Schema.O != "" {
-				fieldText = field.WildCard.Schema.O + "." + fieldText
-			}
+		match := wildcardRe.FindStringSubmatch(text[field.Offset:])
+		if match == nil {
+			return nil, fmt.Errorf("%s Can't detect wildcard near %+q", errPrefix,
+				text[field.Offset:])
 		}
-		if !strings.HasPrefix(text[field.Offset:], fieldText) {
-			return nil, fmt.Errorf("%s strings.HasPrefix(%+q, %+q) == false", errPrefix,
-				text[field.Offset:], fieldText)
-		}
-		offset = field.Offset + len(fieldText)
+		offset = field.Offset + len(match[0])
 
 		// Expand wildcard.
 		tableRefName := ctx.UniqueTableName(field.WildCard.Schema.L, field.WildCard.Table.L)
