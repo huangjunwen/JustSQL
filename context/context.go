@@ -10,7 +10,7 @@ const (
 )
 
 // Context contains an embeded database (tidb), extracted database meta
-// information and some global information.
+// information.
 type Context struct {
 	// The embeded db.
 	DB *EmbedDB

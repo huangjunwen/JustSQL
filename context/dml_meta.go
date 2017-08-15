@@ -142,11 +142,11 @@ func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, 
 				}
 
 				if tableRefName == "" {
-					return fmt.Errorf("[bug?] No name for table source[%d]", len(ret.TableSources))
+					return fmt.Errorf("[bug?] No name for the %d-th table", len(ret.TableSources))
 				}
 				if _, ok := ret.TableRefNameMap[tableRefName]; ok {
-					return fmt.Errorf("Duplicate table name/alias %+q, plz checkout JustSQL's document",
-						tableRefName)
+					return fmt.Errorf("Duplicate table name/alias %+q, "+
+						"JustSQL enforces unique name/alias for each table source", tableRefName)
 				}
 				ret.TableRefNameMap[tableRefName] = len(ret.TableSources)
 				ret.TableSources = append(ret.TableSources, r)
@@ -159,7 +159,7 @@ func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, 
 				}
 
 			default:
-				return fmt.Errorf("Not supported type %T in collect", r)
+				return fmt.Errorf("Not supported type %T in collecting table sources", r)
 			}
 		}
 
@@ -186,7 +186,7 @@ func NewTableRefsMeta(ctx *Context, refs *ast.TableRefsClause) (*TableRefsMeta, 
 		}
 
 		if existName, ok := names[name]; ok {
-			return nil, fmt.Errorf("Plz add alias to table ref name %+q or %+q", existName,
+			return nil, fmt.Errorf("Please add alias to table %+q or %+q", existName,
 				tableRefName)
 		}
 		names[name] = tableRefName
@@ -465,13 +465,14 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 			continue
 		}
 
-		errPrefix := fmt.Sprintf("Expand wildcard field[%d]:", n)
+		errPrefix := fmt.Sprintf("Error when expanding wildcard for the %d-th field:", n)
 
 		// Save part before this wildcard field.
 		parts = append(parts, text[offset:field.Offset])
 
-		// Calculate this wildcard field length to move offset.
+		// Calculate this wildcard field length to forward offset.
 		// XXX: field.Text() return "" so i need to construct the field text myself -_-
+		// TODO: use regexp to parse this
 		fieldText := "*"
 		if field.WildCard.Table.O != "" {
 			fieldText = field.WildCard.Table.O + ".*"
@@ -493,15 +494,14 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 
 			// Qualified wildcard ("[db.]tbl.*")
 			rfs := s.TableRefs.GetResultFields(tableRefName)
-			if rfs == nil {
+			if len(rfs) == 0 {
 				panic(fmt.Errorf("%s No result fields for table %+q", errPrefix, tableRefName))
 			}
 
 			for i, rf := range rfs {
 				rfName, err := resultFieldName(rf, true)
 				if err != nil {
-					return nil, fmt.Errorf("%s resultFieldName for %+q[%d]: %s",
-						errPrefix, tableRefName, i, err)
+					return nil, fmt.Errorf("%s %s", errPrefix, err)
 				}
 				expandParts = append(expandParts, tableRefName+"."+rfName)
 			}
@@ -513,12 +513,14 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 
 				tableRefName = s.TableRefs.TableRefNames[i]
 				rfs := table.GetResultFields()
+				if len(rfs) == 0 {
+					panic(fmt.Errorf("%s No result fields for table %+q", errPrefix, tableRefName))
+				}
 
 				for j, rf := range rfs {
 					rfName, err := resultFieldName(rf, true)
 					if err != nil {
-						return nil, fmt.Errorf("%s resultFieldName for %+q[%d]: %s",
-							errPrefix, tableRefName, j, err)
+						return nil, fmt.Errorf("%s %s", errPrefix, err)
 					}
 					expandParts = append(expandParts, tableRefName+"."+rfName)
 				}
