@@ -11,6 +11,7 @@ func init() {
 {{/* =========================== */}}
 {{- $ctx := imp "context" -}}
 {{- $sql := imp "database/sql" -}}
+{{- $driver := imp "database/sql/driver" -}}
 {{- $sqlx := imp "github.com/jmoiron/sqlx" -}}
 
 // Global variables.
@@ -28,6 +29,18 @@ type DBer interface {
 	ExecContext({{ $ctx }}.Context, string, ...interface{}) ({{ $sql }}.Result, error)
 	QueryContext({{ $ctx }}.Context, string, ...interface{}) (*{{ $sql }}.Rows, error)
 	QueryRowContext({{ $ctx }}.Context, string, ...interface{}) *{{ $sql }}.Row
+}
+
+// IsValueValid return true if value is not 'NULL'
+func IsValueValid(value interface{}) bool {
+	switch val := value.(type) {
+	case {{ $driver }}.Valuer:
+		v, err := val.Value()
+		if v == nil || err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 `)

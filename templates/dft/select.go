@@ -10,6 +10,7 @@ func init() {
 {{/*          imports            */}}
 {{/* =========================== */}}
 {{- $ctx := imp "context" -}}
+{{- $sql := imp "database/sql" -}}
 {{- $sqlx := imp "github.com/jmoiron/sqlx" -}}
 {{- $template := imp "text/template" -}}
 {{- $bytes := imp "bytes" -}}
@@ -134,6 +135,9 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 	// - Scan.
 	ret_ := new{{ $retName }}()
 	if err_ := row_.Scan({{ range $i, $name := $retFieldNamesFlatten }}{{ if ne $i 0 }}, {{ end }}&ret_.{{ $name }}{{ end }}); err_ != nil {
+		if err_ == {{ $sql }}.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err_
 	}
 

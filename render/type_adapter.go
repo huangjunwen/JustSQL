@@ -173,3 +173,71 @@ func (ta *TypeAdapter) AdaptType(ft *ts.FieldType) *TypeName {
 	// Should never be here
 	panic(fmt.Errorf("AdaptType failed"))
 }
+
+func (ta *TypeAdapter) CastType(srcExpr string, srcTypeName, dstTypeName *TypeName) (string, error) {
+
+	srcSpec := srcTypeName.Spec()
+	dstSpec := dstTypeName.Spec()
+
+	if srcSpec == dstSpec {
+		return srcExpr, nil
+	}
+
+	switch srcSpec {
+	case "int", "uint", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64":
+		switch dstSpec {
+		case "database/sql.NullInt64":
+			return fmt.Sprintf("%s.NullInt64{Int64: int64(%s), Valid: true}", dstTypeName.PkgName.String(), srcExpr), nil
+		}
+	case "database/sql.NullInt64":
+		switch dstSpec {
+		case "int", "uint", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64":
+			return fmt.Sprintf("%s(%s.Int64)", dstSpec, srcExpr), nil
+		}
+	case "string":
+		switch dstSpec {
+		case "database/sql.NullString":
+			return fmt.Sprintf("%s.NullString{String: %s, Valid: true}", dstTypeName.PkgName.String(), srcExpr), nil
+		}
+	case "database/sql.NullString":
+		switch dstSpec {
+		case "string":
+			return fmt.Sprintf("%s.String", srcExpr), nil
+		}
+	case "float32", "float64":
+		switch dstSpec {
+		case "database/sql.NullFloat64":
+			return fmt.Sprintf("%s.NullFloat64{Float64 : float64(%s), Valid: true}", dstTypeName.PkgName.String(), srcExpr), nil
+		}
+	case "database/sql.NullFloat64":
+		switch dstSpec {
+		case "float32", "float64":
+			return fmt.Sprintf("%s(%s.Float64)", dstSpec, srcExpr), nil
+		}
+	case "bool":
+		switch dstSpec {
+		case "database/sql.NullBool":
+			return fmt.Sprintf("%s.NullBool{Bool: %s, Valid: true}", dstTypeName.PkgName.String(), srcExpr), nil
+		}
+	case "database/sql.NullBool":
+		switch dstSpec {
+		case "bool":
+			return fmt.Sprintf("%s.Bool)", srcExpr), nil
+		}
+	case "time.Time":
+		switch dstSpec {
+		case "github.com/go-sql-driver/mysql.NullTime":
+			return fmt.Sprintf("%s.NullTime{Time: %s, Valid: true}", dstTypeName.PkgName.String(), srcExpr), nil
+		}
+	case "github.com/go-sql-driver/mysql.NullTime":
+		switch dstSpec {
+		case "time.Time":
+			return fmt.Sprintf("%s.Time)", srcExpr), nil
+		}
+	case "[]byte":
+
+	}
+
+	return "", fmt.Errorf("Don't know how to cast %q to %q", srcSpec, dstSpec)
+
+}

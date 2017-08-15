@@ -11,8 +11,9 @@ func init() {
 {{/* =========================== */}}
 {{- $ctx := imp "context" -}}
 {{- $fmt := imp "fmt" -}}
-{{- $sqlx := imp "github.com/jmoiron/sqlx" -}}
+{{- $sql := imp "database/sql" -}}
 {{- $driver := imp "database/sql/driver" -}}
+{{- $sqlx := imp "github.com/jmoiron/sqlx" -}}
 {{- $strings := imp "strings" -}}
 
 {{/* =========================== */}}
@@ -300,14 +301,28 @@ func (entry_ *{{ $structName }}) Delete(ctx_ {{ $ctx }}.Context, db_ DBer) (int6
 {{/* =========================== */}}
 
 {{- range $i, $fk := .Table.ForeignKeys }}
-	{{- $fkColumns := $fk.Columns }}
-	{{- $refTable := $fk.RefTable }}
 	{{- $refIndex := $fk.RefIndex }}
 	{{- if $refIndex.Unique }}
+	{{/* =========================== */}}
+	{{/*    foreign key variables    */}}
+	{{/* =========================== */}}
+		{{- $fkColumns := $fk.Columns }}
+		{{- $refTable := $fk.RefTable }}
+		{{- $refColumns := $fk.RefColumns }}
+
+	{{/* =========================== */}}
+	{{/*       foreign key code      */}}
+	{{/* =========================== */}}
 
 // {{ $refTable.PascalName }} return {{ printf "%q" $refTable.Name }} entry by foreign key "{{ printf "%s.%s" $fk.Table.Name $fk.Name }}".
 func (entry_ *{{ $structName }}) {{ $refTable.PascalName }}(ctx_ {{ $ctx }}.Context, db_ DBer) (*{{ $refTable.PascalName }}, error) {
-	return {{ $refTable.PascalName }}By{{ $refIndex.PascalName }}(ctx_, db_{{ range $j, $col := $fkColumns }}, entry_.{{ $col.PascalName }}{{ end }})
+	return {{ $refTable.PascalName }}By{{ $refIndex.PascalName }}(ctx_, db_
+		{{- range $j, $fkCol := $fkColumns -}}
+			{{- $expr := printf "entry_.%s" $fkCol.PascalName -}}
+			{{- $fkColType := typeName $fkCol -}}
+			{{- $refColType := typeName (index $refColumns $j) -}}
+		, {{ cast $expr $fkColType $refColType }}
+		{{- end -}})
 }
 	{{- end }}
 {{- end }}
@@ -336,7 +351,8 @@ func (entry_ *{{ $structName }}) {{ $refTable.PascalName }}(ctx_ {{ $ctx }}.Cont
 	{{/*      unique index code      */}}
 	{{/* =========================== */}}
 
-// {{ $structName }}By{{ $index.PascalName }} query {{ printf "%+q" $tableName }} table by {{ if $index.Primary }}primary key.{{ else }}unique key {{ printf "%+q" $index.Name }}.{{ end }}
+// {{ $structName }}By{{ $index.PascalName }} query {{ printf "%+q" $tableName }} table by {{ if $index.Primary }}primary key{{ else }}unique key {{ printf "%+q" $index.Name }}{{ end }}.
+// Return nil if error occurred or there is not row found.
 func {{ $structName }}By{{ $index.PascalName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $j, $argName := $argNames }}, {{ $argName }} {{ index $argTypes $j }}{{ end }}) (*{{ $structName }}, error) {
 
 	sql_ := {{ $sqlx }}.Rebind(BindType, "SELECT {{ join (columnNames $cols) ", " }} " +
@@ -347,6 +363,9 @@ func {{ $structName }}By{{ $index.PascalName }}(ctx_ {{ $ctx }}.Context, db_ DBe
 
 	entry_ := new({{ $structName }})
 	if err_ := row_.Scan({{ range $j, $field := $structFieldNames }}{{ if ne $j 0 }}, {{ end }}&entry_.{{ $field }}{{ end }}); err_ != nil {
+		if err_ == {{ $sql }}.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err_
 	}
 

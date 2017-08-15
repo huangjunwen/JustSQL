@@ -205,3 +205,12 @@ func (tn *TypeName) String() string {
 	}
 	return fmt.Sprintf("%s.%s", pkgName, tn.TypeName)
 }
+
+// Spec returns the full (unique) spec of the type name.
+func (tn *TypeName) Spec() string {
+	if tn.PkgName.PkgPath == "" {
+		return tn.TypeName
+	}
+	return fmt.Sprintf("%s.%s", tn.PkgName.PkgPath, tn.TypeName)
+
+}

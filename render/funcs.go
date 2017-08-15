@@ -238,11 +238,22 @@ func buildTypeName(r *Renderer) func(interface{}) (*TypeName, error) {
 		switch v := val.(type) {
 		case *ts.FieldType:
 			return r.TypeAdapter.AdaptType(v), nil
+		case *context.ColumnMeta:
+			return r.TypeAdapter.AdaptType(v.Type), nil
+		case *context.ResultFieldMeta:
+			return r.TypeAdapter.AdaptType(v.Type), nil
 		case string:
 			return r.Scopes.CreateTypeNameFromSpec(v), nil
 		default:
 			return nil, fmt.Errorf("typeName: not support %T as argument", v)
 		}
+	}
+}
+
+func buildCast(r *Renderer) func(string, *TypeName, *TypeName) (string, error) {
+	ta := r.TypeAdapter
+	return func(srcExpr string, srcTypeName, dstTypeName *TypeName) (string, error) {
+		return ta.CastType(srcExpr, srcTypeName, dstTypeName)
 	}
 }
 
@@ -323,6 +334,7 @@ func BuildExtraFuncs(r *Renderer) template.FuncMap {
 		// Source code helpers.
 		"imp":      buildImp(r),
 		"typeName": buildTypeName(r),
+		"cast":     buildCast(r),
 		// Database helpers.
 		"columnList":  NewColumnList,
 		"columnNames": columnNames,
