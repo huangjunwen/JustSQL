@@ -498,7 +498,7 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 				panic(fmt.Errorf("%s No result fields for table %+q", errPrefix, tableRefName))
 			}
 
-			for i, rf := range rfs {
+			for _, rf := range rfs {
 				rfName, err := resultFieldName(rf, true)
 				if err != nil {
 					return nil, fmt.Errorf("%s %s", errPrefix, err)
@@ -517,7 +517,7 @@ func (s *SelectStmtMeta) ExpandWildcard(ctx *Context) (*SelectStmtMeta, error) {
 					panic(fmt.Errorf("%s No result fields for table %+q", errPrefix, tableRefName))
 				}
 
-				for j, rf := range rfs {
+				for _, rf := range rfs {
 					rfName, err := resultFieldName(rf, true)
 					if err != nil {
 						return nil, fmt.Errorf("%s %s", errPrefix, err)
