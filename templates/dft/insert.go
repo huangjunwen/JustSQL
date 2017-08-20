@@ -47,13 +47,17 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 	// - Handle named query.
 	query_, args_, err_ := {{ $sqlx }}.Named(sql_, dot_)
 	if err_ != nil {
-		return nil, err_
+		return 0, err_
 	}
 
 	query_ = {{ $sqlx }}.Rebind(BindType, query_)
 
 	// - Execute.
-	return db_.ExecContext(ctx_, query_, args_...).RowsAffected()
+	res_, err_ := db_.ExecContext(ctx_, query_, args_...)
+	if err_ != nil {
+		return 0, err_
+	}
+	return res_.RowsAffected()
 	
 }
 

@@ -49,20 +49,20 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 	// - Render from template.
 	buf_ := new({{ $bytes }}.Buffer)
 	if err_ := _{{ $funcName }}SQLTmpl.Execute(buf_, dot_); err_ != nil {
-		return nil, err_
+		return 0, err_
 	}
 
 	// - Handle named query.
 	query_, args_, err_ := {{ $sqlx }}.Named(buf_.String(), dot_)
 	if err_ != nil {
-		return nil, err_
+		return 0, err_
 	}
 
 {{ if $hasInBinding -}}
 	// - Handle "IN (?)".
 	query_, args_, err_ = {{ $sqlx }}.In(query_, args_...)
 	if err_ != nil {
-		return nil, err_
+		return 0, err_
 	}
 {{- end }}
 
@@ -70,7 +70,11 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 	query_ = {{ $sqlx }}.Rebind(BindType, query_)
 
 	// - Execute.
-	return db_.ExecContext(ctx_, sql_, args_...).RowsAffected()
+	res_, err_ := db_.ExecContext(ctx_, sql_, args_...)
+	if err_ != nil {
+		return 0, err_
+	}
+	return res_.RowsAffected()
 	
 }
 
