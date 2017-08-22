@@ -1,0 +1,9 @@
+{
+    "ddl": [
+        "sql/ddl.sql"
+    ],
+    "dml": [
+        "sql/dml.sql"
+    ],
+    "o": "model"
+}
