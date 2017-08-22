@@ -48,6 +48,7 @@ func Initialize() {
 
 	// Init renderer.
 	renderer, err = render.NewRenderer(ctx)
+	renderer.TypeAdapter.AllNullTypes = options.AllNullTypes
 	if err != nil {
 		log.Fatalf("NewRenderer(): %s", err)
 	}

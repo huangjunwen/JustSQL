@@ -9,37 +9,26 @@ import (
 // For adapting database type and go type.
 type TypeAdapter struct {
 	*Scopes
-	customAdatpers []func(*TypeAdapter, *ts.FieldType) *TypeName
+	AllNullTypes bool
 }
 
 func NewTypeAdapter(scopes *Scopes) *TypeAdapter {
 	return &TypeAdapter{
-		Scopes:         scopes,
-		customAdatpers: make([]func(*TypeAdapter, *ts.FieldType) *TypeName, 0),
+		Scopes: scopes,
 	}
-}
-
-// Add a custom type adapter.
-func (ta *TypeAdapter) AddCustomAdapter(f func(*TypeAdapter, *ts.FieldType) *TypeName) {
-	ta.customAdatpers = append(ta.customAdatpers, f)
 }
 
 // Main method of TypeAdapter. Find a type suitable to store a db field data.
 func (ta *TypeAdapter) AdaptType(ft *ts.FieldType) *TypeName {
-	// Iterate custom adapters in reverse order
-	for i := len(ta.customAdatpers) - 1; i >= 0; i -= 1 {
-		tn := ta.customAdatpers[i](ta, ft)
-		if tn != nil {
-			return tn
-		}
-	}
-
 	// see: github.com/pingcap/tidb/mysql/type.go and github.com/pingcap/tidb/util/types/field_type.go
 	cls := ft.ToClass()
 	tp := ft.Tp
 	flen := ft.Flen
 	flag := ft.Flag
 	nullable := !mysql.HasNotNullFlag(flag)
+	if ta.AllNullTypes {
+		nullable = true
+	}
 	unsigned := mysql.HasUnsignedFlag(flag)
 	binary := mysql.HasBinaryFlag(flag)
 

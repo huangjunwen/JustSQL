@@ -50,6 +50,7 @@ type Options struct {
 	NoFormat          bool          `json:"nofmt"` // Do not go format output files.
 	CustomTemplateDir MutipleValues `json:"t"`     // Add custom template set directory.
 	TemplateSetName   string        `json:"T"`     // Explicitly specify template set name for renderring.
+	AllNullTypes      bool          `json:"null"`  // Use sql.NullInt64/sql.NullString for all types even the field is NOT NULL.
 }
 
 func ParseOptions() *Options {
@@ -91,6 +92,7 @@ func ParseOptions() *Options {
 	flag.BoolVar(&options.NoFormat, "nofmt", false, "Do not go format output files.")
 	flag.Var(&options.CustomTemplateDir, "t", "Add custom templates set in specified directory. Multiple \"-t\" is allowed.")
 	flag.StringVar(&options.TemplateSetName, "T", "", "Explicitly specify template set name for renderring.")
+	flag.BoolVar(&options.AllNullTypes, "null", false, "Use sql.NullInt64/sql.NullString ... for all types even the field is NOT NULL.")
 	flag.Parse()
 
 	if help {
@@ -135,12 +137,15 @@ func ParseOptions() *Options {
 		}
 		options.DDL = append(configOptions.DDL, options.DDL...)
 		options.DML = append(configOptions.DML, options.DML...)
-		if configOptions.NoFormat {
+		if options.NoFormat || configOptions.NoFormat {
 			options.NoFormat = true
 		}
 		options.CustomTemplateDir = append(configOptions.CustomTemplateDir, options.CustomTemplateDir...)
 		if options.TemplateSetName == "" && configOptions.TemplateSetName != "" {
 			options.TemplateSetName = configOptions.TemplateSetName
+		}
+		if options.AllNullTypes || configOptions.AllNullTypes {
+			options.AllNullTypes = true
 		}
 	} else {
 		// Yield error only when config file is explicit.
