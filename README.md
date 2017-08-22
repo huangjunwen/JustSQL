@@ -1,4 +1,4 @@
-# JustSQL
+# JustSQL [![Build Status](https://travis-ci.org/huangjunwen/JustSQL.svg?branch=master)](https://travis-ci.org/huangjunwen/JustSQL)
 
 JustSQL is a tool to generate golang wrapper code for SQL queries. It's inspired by [xo](https://github.com/knq/xo), but base on [TiDB](https://github.com/pingcap/tidb) to 'understand' SQL. Thus it only supports what TiDB supports: a majority of MySQL grammar (Also see: [Compatibility with MySQL](https://github.com/pingcap/docs/blob/master/sql/mysql-compatibility.md)). But since it directly invokes TiDB's parser/compiler to process SQL, it has more 'knowledge' to generate more friendly code.
 
