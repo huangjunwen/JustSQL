@@ -2,9 +2,8 @@ language: go
 go:
   - 1.8
 install:
-  - go get -d -v github.com/pingcap/tidb
-  - go get -d -v github.com/huangjunwen/JustSQL/justsql
-  - cd $GOPATH/src/github.com/pingcap/tidb && git checkout tags/Pre-GA && make parserlib
+  - mkdir -p $GOPATH/src/github.com/pingcap/ && cd $GOPATH/src/github.com/pingcap && git clone https://github.com/pingcap/tidb.git
+  - cd $GOPATH/src/github.com/pingcap/tidb && git checkout tags/Pre-GA && make update && make parserlib
   - cd $GOPATH/src/github.com/huangjunwen/JustSQL && GOOS=linux GOARCH=amd64 make release
   - cd $GOPATH/src/github.com/huangjunwen/JustSQL && GOOS=darwin GOARCH=amd64 make release
 deploy:
