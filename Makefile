@@ -15,7 +15,7 @@ else
 	TARGET_TARBALL := $(TARGET)-$(VER)-$(OS)-$(MACHINE).tgz
 endif
 
-GOBUILD := CGO_ENABLED=0 go build
+GOBUILD := GOOS=$(GOOS) GOARCH=$(GOARCH) GOPATH=$(GOPATH)/src/github.com/pingcap/tidb/_vendor:$(GOPATH) CGO_ENABLED=0 go build
 LDFLAGS += -X "github.com/huangjunwen/JustSQL/utils.BuildTS=$(shell date)"
 LDFLAGS += -X "github.com/huangjunwen/JustSQL/utils.GitHash=$(shell git rev-parse HEAD)"
 
@@ -32,4 +32,4 @@ $(BIN)/$(TARGET_TARBALL): $(BIN)/$(TARGET)
 	cd $(BIN) && tar -zcvf $(TARGET_TARBALL) $(TARGET) && rm $(TARGET)
 
 $(BIN)/$(TARGET):
-	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -ldflags '$(LDFLAGS)' -o $(BIN)/$(TARGET) "github.com/huangjunwen/JustSQL/justsql"
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o $(BIN)/$(TARGET) "github.com/huangjunwen/JustSQL/justsql"
