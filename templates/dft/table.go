@@ -258,10 +258,10 @@ func (entry_ *{{ $structName }}) Insert(ctx_ {{ $ctx }}.Context, db_ DBer) error
 		return err_
 	}
 
-	entry_.{{ $autoIncCol.PascalName }} = {{ typeName $autoIncCol.Type }}(lastInsertId_)
-	{{ end -}}
-
+	return SaveCoerceFromInt64(lastInsertId_, &entry_.{{ $autoIncCol.PascalName }})
+	{{ else -}}
 	return nil
+	{{ end -}}
 }
 
 {{ if ne (len $primaryCols) 0 -}}
