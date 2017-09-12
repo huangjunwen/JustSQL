@@ -70,7 +70,7 @@ func {{ $funcName }}(ctx_ {{ $ctx }}.Context, db_ DBer{{ range $arg := .Annot.Ar
 	query_ = {{ $sqlx }}.Rebind(BindType, query_)
 
 	// - Execute.
-	res_, err_ := db_.ExecContext(ctx_, sql_, args_...)
+	res_, err_ := db_.ExecContext(ctx_, query_, args_...)
 	if err_ != nil {
 		return 0, err_
 	}
