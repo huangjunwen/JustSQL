@@ -56,6 +56,7 @@ func CoerceFromInt64(src int64, target interface{}) {
 		{{ $reflect }}.ValueOf(v).Elem().SetUint(uint64(src))
 	case *{{ $sql }}.NullInt64:
 		v.Int64 = src
+		v.Valid = true
 	default:
 		panic({{ $fmt }}.Errorf("CoerceFromInt64 not support target type %T", target))
 	}
