@@ -78,7 +78,7 @@ const (
 	{{ $enumName }}NULL_ = {{ $enumName }}(0)
 	{{- range $i, $item := $enumItems }}
 	// {{ printf "%+q" (index $col.Elems $i) }}
-	{{ $item }} = {{ $enumName }}({{ $i }})
+	{{ $item }} = {{ $enumName }}({{ $i }} + 1)
 	{{- end }}
 )
 
@@ -116,7 +116,7 @@ func (e *{{ $enumName }}) Scan(value interface{}) error {
 }
 
 // Value implements database/sql/driver.Valuer interface.
-func (e {{ $enumName }}) Value() (driver.Value, error) {
+func (e {{ $enumName }}) Value() ({{ $driver }}.Value, error) {
 	if !e.Valid() {
 		return nil, nil
 	}
